@@ -14,6 +14,7 @@
       END
 
       SUBROUTINE CHECK_COLLISIONS(R, NT, HAS_COLLIDED, FPT_DIST, TIME, COL_TYPE)
+      IMPLICIT NONE
       INTEGER NT, COL_TYPE
       DOUBLE PRECISION FPT_DIST, TIME
       DOUBLE PRECISION R(NT,3), HAS_COLLIDED(NT, NT)
@@ -48,7 +49,8 @@
       END
 
       SUBROUTINE CHECK_COLLISIONS_KD(R, NT, HAS_COLLIDED, FPT_DIST, TIME, COL_TYPE)
-      use kdtree2_module, only : kdtree2, kdtree2_result, kdtree2_create, kdtree2_r_nearest_around_point
+      use kdtree2_module, only : kdtree2, kdtree2_result, kdtree2_create, &
+                                 kdtree2_r_nearest_around_point
 
       INTEGER NT, COL_TYPE, NFOUND, NALLOC, K1, K2, I
       DOUBLE PRECISION FPT_DIST, TIME

@@ -12,7 +12,7 @@
 
       use mt19937, only : grnd, sgrnd, rnorm, mt, mti
 
-      PARAMETER (PI=3.141592654) ! Value of pi
+      implicit none
 
       DOUBLE PRECISION R(NT,3)  ! Bead positions
       DOUBLE PRECISION U(NT,3)  ! Tangent vectors

@@ -28,7 +28,8 @@ src/third_party/sort.o :
 	gfortran -c -g -Jsrc -Isrc -cpp   src/third_party/sort.f90 -o src/third_party/sort.o
 src/SIMcode/r_to_erg.o : 
 	gfortran -c -g -Jsrc -Isrc -cpp   src/SIMcode/r_to_erg.f90 -o src/SIMcode/r_to_erg.o
-src/SIMcode/getpara.o : 
+src/SIMcode/getpara.o :  \
+	src/SIMcode/sim_params.o
 	gfortran -c -g -Jsrc -Isrc -cpp   src/SIMcode/getpara.f90 -o src/SIMcode/getpara.o
 src/SIMcode/decim.o : 
 	gfortran -c -g -Jsrc -Isrc -cpp   src/SIMcode/decim.f90 -o src/SIMcode/decim.o
@@ -40,7 +41,10 @@ src/SIMcode/ran2.o :
 src/SIMcode/initcond.o :  \
 	src/third_party/mt19937.o
 	gfortran -c -g -Jsrc -Isrc -cpp   src/SIMcode/initcond.f90 -o src/SIMcode/initcond.o
+src/SIMcode/sim_params.o : 
+	gfortran -c -g -Jsrc -Isrc -cpp   src/SIMcode/sim_params.f90 -o src/SIMcode/sim_params.o
 src/SIMcode/wlcsim.o :  \
+	src/SIMcode/sim_params.o \
 	src/third_party/mt19937.o
 	gfortran -c -g -Jsrc -Isrc -cpp   src/SIMcode/wlcsim.f90 -o src/SIMcode/wlcsim.o
 src/BDcode/force_elas.o : 

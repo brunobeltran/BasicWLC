@@ -1,319 +1,272 @@
 !---------------------------------------------------------------*
 
-      PROGRAM wlcsim
+program wlcsim
 
 !
-!     WLC Simulation Package:
-!     Simulation Package for Brownian dynamics and
-!     Monte Carlo Simulation
+!     wlc simulation package:
+!     simulation package for brownian dynamics and
+!     monte carlo simulation
 !
-!     Andrew Spakowitz
-!     Version 1.0
+!     andrew spakowitz
+!     version 1.0
 !     8/17/2015
 !
 
-!     Variables within the simulation
+!     variables within the simulation
 
-      use mt19937, only : grnd, sgrnd, rnorm, mt, mti
+    use mt19937, only : grnd, sgrnd, rnorm, mt, mti
+    use sim_params, only : n, np, dp, tf, indmax, dt, frmfile, brown, &
+                           inton, logtime, ninit, nstep, fpt_dist, col_type
+    implicit none
 
-      implicit none
+    external write_coltimes ! must declare sighandlers as external
 
-      external WRITE_COLTIMES ! must declare sighandlers as external
+    real(dp), parameter :: pi=3.141592654 ! value of pi
 
-      DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:,:):: R     ! Conformation of polymer chains
-      DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:,:):: U     ! Conformation of polymer chains
-      DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:,:):: R0 ! Conformation of polymer chains
-      DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:,:):: U0 ! Conformation of polymer chains
+    integer, parameter :: nt = n*np ! total # beads among all polymers in sim
+    real(dp) :: r(nt,3)     ! conformation of polymer chains
+    real(dp) :: u(nt,3)     ! conformation of polymer chains
+    real(dp) :: r0(nt,3)    ! conformation of polymer chains
+    real(dp) :: u0(nt,3)    ! conformation of polymer chains
 
-      INTEGER NT                 ! Number of beads in simulation
-      INTEGER N                 ! Number of beads in simulation
-      INTEGER NP                ! Number of polymers in simulation
-      DOUBLE PRECISION L0       ! Equilibrium segment length
-      DOUBLE PRECISION ENERGY   ! Total energy
-      DOUBLE PRECISION TIME     ! Current time
-      DOUBLE PRECISION TSAVE     ! Time of save point
-      DOUBLE PRECISION T0,TF    ! Initial/final times
-      DOUBLE PRECISION DT       ! Time step size
-      INTEGER I,J,IB            ! Index
-      INTEGER INDMAX            ! Maximum index in series
-      INTEGER IND               ! Ind in series
-      INTEGER TENS              ! Decimal of index
-      character*4 fileind       ! Index of output
-      character*16 snapnm       ! File for output
+    real(dp) l0             ! equilibrium segment length
+    real(dp) energy         ! total energy
+    real(dp) time           ! current time
+    real(dp) tsave          ! time of save point
+    integer i,j,ib          ! index
+    integer ind             ! ind in series
+    integer tens            ! decimal of index
+    character*4 fileind     ! index of output
+    character*16 snapnm     ! file for output
 
-!     Simulation input variables
+!     simulation input variables
 
-      INTEGER FRMFILE           ! Initial condition
-      INTEGER BROWN             ! Include Brownian forces
-      INTEGER INTON             ! Include polymer interactions
-      INTEGER LOGTIME           ! Is data recorded in log time?
-      DOUBLE PRECISION DT0      ! Initial time step size
-      INTEGER NSTEP,NINIT
+    real(dp) :: dt0 = dt      ! initial time step size
 
-!     Monte Carlo variables
+!     monte carlo variables
 
-      DOUBLE PRECISION MCAMP(6) ! Amplitude of random change
-      INTEGER MOVEON(6)            ! Is the move active
-      INTEGER WINDOW(6)            ! Size of window for bead selection
-      INTEGER SUCCESS(6)        ! Number of successes
+    real(dp) mcamp(6)   ! amplitude of random change
+    integer moveon(6)   ! is the move active
+    integer window(6)   ! size of window for bead selection
+    integer success(6)  ! number of successes
 
-!     Energy variables
+!     energy variables
 
-      DOUBLE PRECISION EELAS(3) ! Elastic energy
-      DOUBLE PRECISION EPONP    ! Poly-poly energy
+    real(dp) eelas(3)   ! elastic energy
+    real(dp) eponp      ! poly-poly energy
 
-!     Structure analysis
+!     structure analysis
 
-      DOUBLE PRECISION RCOM(3)  ! Center of mass
-      DOUBLE PRECISION DELR(3)  ! Mag of gyration tensor
-      DOUBLE PRECISION RCOM0(3) ! Init val RCOM
-      DOUBLE PRECISION DELR0(3) ! Init val DELR
-      DOUBLE PRECISION DRCOM    ! Change in RCOM
-      DOUBLE PRECISION SIG(3,3)
-      DOUBLE PRECISION COR
+    real(dp) rcom(3)    ! center of mass
+    real(dp) delr(3)    ! mag of gyration tensor
+    real(dp) rcom0(3)   ! init val rcom
+    real(dp) delr0(3)   ! init val delr
+    real(dp) drcom      ! change in rcom
+    real(dp) sig(3,3)
+    real(dp) cor
 
-!     Variables in the simulation
+!     variables in the simulation
 
-      DOUBLE PRECISION PARA(10)
-      INTEGER SIMTYPE           ! Simulation method (WLC=1,SSWLC=2,GC=3)
+    real(dp) para(10)
+    integer simtype     ! simulation method (wlc=1,sswlc=2,gc=3)
 
-!     Variables for the random number generators
+!     variables for the random number generators
 
-      INTEGER IDUM              ! Seed for the generator
-      DOUBLE PRECISION MOM(6)
+    integer idum        ! seed for the generator
+    real(dp) mom(6)
 
-!     Variable to hold time of first collisions between each bead
-      DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:,:):: HAS_COLLIDED
-      DOUBLE PRECISION FPT_DIST ! l1 dist to trigger collision
-      INTEGER COL_TYPE ! what kind of collision checking to use
+!     variable to hold time of first collisions between each bead
+    real(dp), allocatable, dimension(:,:):: has_collided
 
+    call getpara(para,dt0,simtype)
 
-!     Load in the parameters for the simulation
+    if (col_type.ne.0) then
+        allocate(has_collided(nt,nt))
+        has_collided = -1.0d+0
+    endif
 
-      open (unit=5, file='input/input')
-      read (unit=5, fmt='(24(/))')
-      read (unit=5, fmt=*) N
-      read (unit=5, fmt='(2(/))')
-      read (unit=5, fmt=*) NP
-      read (unit=5, fmt='(2(/))')
-      read (unit=5, fmt=*) TF
-      read (unit=5, fmt='(2(/))')
-      read (unit=5, fmt=*) INDMAX
-      read (unit=5, fmt='(2(/))')
-      read (unit=5, fmt=*) DT
-      read (unit=5, fmt='(2(/))')
-      read (unit=5, fmt=*) FRMFILE
-      read (unit=5, fmt='(2(/))')
-      read (unit=5, fmt=*) BROWN
-      read (unit=5, fmt='(2(/))')
-      read (unit=5, fmt=*) INTON
-      read (unit=5, fmt='(2(/))')
-      read (unit=5, fmt=*) LOGTIME
-      read (unit=5, fmt='(2(/))')
-      read (unit=5, fmt=*) NINIT
-      read (unit=5, fmt='(2(/))')
-      read (unit=5, fmt=*) NSTEP
-      read (unit=5, fmt='(2(/))')
-      read (unit=5, fmt=*) FPT_DIST
-      read (unit=5, fmt='(2(/))')
-      read (unit=5, fmt=*) COL_TYPE
-      close(5)
-      call getpara(PARA,DT,SIMTYPE)
-      DT0=DT
+!     setup the initial condition
 
-      NT=N*NP
-      ALLOCATE(R(NT,3))
-      ALLOCATE(U(NT,3))
-      ALLOCATE(R0(NT,3))
-      ALLOCATE(U0(NT,3))
-      if (COL_TYPE.NE.0) then
-         ALLOCATE(HAS_COLLIDED(NT,NT))
-         HAS_COLLIDED = -1.0d+0
-      endif
+    call initcond(r,u,nt,n,np,idum,frmfile,para)
 
-!     Setup the initial condition
+!     turn on moves for each simulation type
 
-      call initcond(R,U,NT,N,NP,IDUM,FRMFILE,PARA)
+    if (simtype.eq.1) then
+        mcamp(1)=1.
+        mcamp(2)=1.
+        mcamp(3)=1.
+        mcamp(4)=1.
+        mcamp(5)=1.
+        mcamp(6)=1.
+        moveon(1)=1
+        moveon(2)=0
+        moveon(3)=1
+        moveon(4)=0
+    elseif (simtype.eq.2) then
+        mcamp(1)=1.
+        mcamp(2)=1.
+        mcamp(3)=1.
+        mcamp(4)=1.
+        mcamp(5)=1.
+        mcamp(6)=1.
+        moveon(1)=1
+        moveon(2)=1
+        moveon(3)=1
+        moveon(4)=1
+    elseif (simtype.eq.3) then
+        mcamp(1)=1.
+        mcamp(2)=1.
+        mcamp(3)=1.
+        mcamp(4)=1.
+        mcamp(5)=1.
+        mcamp(6)=1.
+        moveon(1)=1
+        moveon(2)=1
+        moveon(3)=1
+        moveon(4)=0
+    endif
 
-!     Turn on moves for each simulation type
+!     turn off whole chain rotation and translation if interactions are off
 
-      if (SIMTYPE.EQ.1) then
-         MCAMP(1)=1.
-         MCAMP(2)=1.
-         MCAMP(3)=1.
-         MCAMP(4)=1.
-         MCAMP(5)=1.
-         MCAMP(6)=1.
-         MOVEON(1)=1
-         MOVEON(2)=0
-         MOVEON(3)=1
-         MOVEON(4)=0
-      elseif (SIMTYPE.EQ.2) then
-         MCAMP(1)=1.
-         MCAMP(2)=1.
-         MCAMP(3)=1.
-         MCAMP(4)=1.
-         MCAMP(5)=1.
-         MCAMP(6)=1.
-         MOVEON(1)=1
-         MOVEON(2)=1
-         MOVEON(3)=1
-         MOVEON(4)=1
-      elseif (SIMTYPE.EQ.3) then
-         MCAMP(1)=1.
-         MCAMP(2)=1.
-         MCAMP(3)=1.
-         MCAMP(4)=1.
-         MCAMP(5)=1.
-         MCAMP(6)=1.
-         MOVEON(1)=1
-         MOVEON(2)=1
-         MOVEON(3)=1
-         MOVEON(4)=0
-      endif
+    if (inton.eq.1) then
+        moveon(5)=1
+        moveon(6)=1
+    else
+        moveon(5)=0
+        moveon(6)=0
+    endif
 
-!     Turn off whole chain rotation and translation if interactions are off
+!     perform an initialization mc simulation
 
-      if (INTON.EQ.1) then
-         MOVEON(5)=1
-         MOVEON(6)=1
-      else
-         MOVEON(5)=0
-         MOVEON(6)=0
-      endif
+    call mcsim(r,u,nt,n,np,ninit,brown,inton,idum,para,mcamp, &
+        success,moveon,window,simtype)
 
-!     Perform an initialization MC simulation
+!     save the conformation and psi angles
 
-      call MCsim(R,U,NT,N,NP,NINIT,BROWN,INTON,IDUM,PARA,MCAMP, &
-           SUCCESS,MOVEON,WINDOW,SIMTYPE)
+    open (unit = 1, file = 'data/r0', status = 'new')
+    ib=1
+    do i=1,np
+        do j=1,n
+            r0(ib,1)=r(ib,1)
+            r0(ib,2)=r(ib,2)
+            r0(ib,3)=r(ib,3)
+            u0(ib,1)=u(ib,1)
+            u0(ib,2)=u(ib,2)
+            u0(ib,3)=u(ib,3)
+            write(1,*) r(ib,1),r(ib,2),r(ib,3)
+            ib=ib+1
+        end do
+    end do
+    close(1)
 
-!     Save the conformation and PSI angles
+    open (unit = 1, file = 'data/u0', status = 'new')
+    ib=1
+    do i=1,np
+        do j=1,n
+        write(1,*) u(ib,1),u(ib,2),u(ib,3)
+        ib=ib+1
+        end do
+    end do
+    close(1)
 
-      OPEN (UNIT = 1, FILE = 'data/r0', STATUS = 'NEW')
-      IB=1
-      DO 10 I=1,NP
-         DO 20 J=1,N
-            R0(IB,1)=R(IB,1)
-            R0(IB,2)=R(IB,2)
-            R0(IB,3)=R(IB,3)
-            U0(IB,1)=U(IB,1)
-            U0(IB,2)=U(IB,2)
-            U0(IB,3)=U(IB,3)
-            WRITE(1,*) R(IB,1),R(IB,2),R(IB,3)
-            IB=IB+1
- 20      CONTINUE
- 10   CONTINUE
-      CLOSE(1)
+!     begin simulation
 
-      OPEN (UNIT = 1, FILE = 'data/u0', STATUS = 'NEW')
-      IB=1
-      DO 30 I=1,NP
-         DO 40 J=1,N
-            WRITE(1,*) U(IB,1),U(IB,2),U(IB,3)
-            IB=IB+1
- 40      CONTINUE
- 30   CONTINUE
-      CLOSE(1)
+    ind=1
+    time=0.
 
-!     Begin simulation
+!     open the output files
 
-      IND=1
-      TIME=0.
+    open (unit = 2, file = 'data/out1', status = 'new')
+    open (unit = 3, file = 'data/out2', status = 'new')
+    open (unit = 4, file = 'data/out3', status = 'new')
 
-!     Open the output files
+    call stress(sig,r,u,nt,n,np,para,inton)
 
-      OPEN (UNIT = 2, FILE = 'data/out1', STATUS = 'NEW')
-      OPEN (UNIT = 3, FILE = 'data/out2', STATUS = 'NEW')
-      OPEN (UNIT = 4, FILE = 'data/out3', STATUS = 'NEW')
+    write(3,*) real(sig(1,1)),real(sig(1,2)),real(sig(1,3)),real(sig(2,1)),real(sig(2,2))
+    write(4,*) real(sig(2,3)),real(sig(3,1)),real(sig(3,2)),real(sig(3,3))
 
-      call stress(SIG,R,U,NT,N,NP,PARA,INTON)
+    do while (ind.le.indmax)
 
-      WRITE(3,*) real(SIG(1,1)),real(SIG(1,2)),real(SIG(1,3)),real(SIG(2,1)),real(SIG(2,2))
-      WRITE(4,*) real(SIG(2,3)),real(SIG(3,1)),real(SIG(3,2)),real(SIG(3,3))
+!     perform a mc simulation, only if nstep.ne.0
 
-      DO WHILE (IND.LE.INDMAX)
+        call mcsim(r,u,nt,n,np,nstep,brown,inton,idum,para,mcamp, &
+            success,moveon,window,simtype)
 
-!     Perform a MC simulation, only if NSTEP.NE.0
+!     perform a brownian dynamics simulation over time step
 
-         call MCsim(R,U,NT,N,NP,NSTEP,BROWN,INTON,IDUM,PARA,MCAMP, &
-              SUCCESS,MOVEON,WINDOW,SIMTYPE)
+        if (logtime.eq.0) then
+        tsave = tf*ind/indmax
+        else
+        tsave = dt0*exp((ind-1.)/(indmax-1.)*log(tf/dt0))
+        endif
+        if (nstep.eq.0) then
+        call bdsim(r,u,nt,n,np,time,tsave,dt0,brown,inton,idum, &
+                    para,simtype,has_collided,fpt_dist,col_type)
+        endif
 
-!     Perform a Brownian dynamics simulation over time step
+!     save the conformation and the metrics
 
-         if (LOGTIME.EQ.0) then
-            TSAVE = TF*IND/INDMAX
-         else
-            TSAVE = DT0*exp((IND-1.)/(INDMAX-1.)*log(TF/DT0))
-         endif
-         if (NSTEP.EQ.0) then
-            call BDsim(R,U,NT,N,NP,TIME,TSAVE,DT,BROWN,INTON,IDUM, &
-                       PARA,SIMTYPE,HAS_COLLIDED,FPT_DIST,COL_TYPE)
-         endif
+        tens=nint(log10(1.*ind)-0.4999)+1
+        write (fileind,'(i4)'), ind
+        snapnm= 'data/r'//fileind((4-tens+1):4)
+        open (unit = 1, file = snapnm, status = 'new')
+        ib=1
+        do i=1,np
+            do j=1,n
+                write(1,*) r(ib,1),r(ib,2),r(ib,3)
+                ib=ib+1
+            end do
+        end do
+        close(1)
 
-!     Save the conformation and the metrics
+        snapnm= 'data/u'//fileind((4-tens+1):4)
+        open (unit = 1, file = snapnm, status = 'new')
+        ib=1
+        do i=1,np
+            do j=1,n
+                write(1,*) u(ib,1),u(ib,2),u(ib,3)
+                ib=ib+1
+            end do
+        end do
+        close(1)
 
-         TENS=nint(log10(1.*IND)-0.4999)+1
-         write (fileind,'(I4)'), IND
-         snapnm= 'data/r'//fileind((4-TENS+1):4)
-         OPEN (UNIT = 1, FILE = snapnm, STATUS = 'NEW')
-         IB=1
-         DO 50 I=1,NP
-            DO 60 J=1,N
-               WRITE(1,*) R(IB,1),R(IB,2),R(IB,3)
-               IB=IB+1
- 60         CONTINUE
- 50      CONTINUE
-         CLOSE(1)
+        snapnm='data/coltimes'
+        open (unit=1, file=snapnm, status='replace')
+        do, i=1,nt
+            write(1,*) ( has_collided(i,j), j=1,nt )
+        enddo
+        close(1)
 
-         snapnm= 'data/u'//fileind((4-TENS+1):4)
-         OPEN (UNIT = 1, FILE = snapnm, STATUS = 'NEW')
-         IB=1
-         DO 70 I=1,NP
-            DO 80 J=1,N
-               WRITE(1,*) U(IB,1),U(IB,2),U(IB,3)
-               IB=IB+1
- 80         CONTINUE
- 70      CONTINUE
-         CLOSE(1)
+        call stress(sig,r,u,nt,n,np,para,inton,simtype)
+        call stressp(cor,r,u,r0,u0,nt,n,np,para,inton,simtype)
 
-         snapnm='data/coltimes'
-         OPEN (UNIT=1, FILE=snapnm, STATUS='REPLACE')
-         DO, I=1,NT
-             WRITE(1,*) ( HAS_COLLIDED(i,j), j=1,NT )
-         ENDDO
-         CLOSE(1)
-
-         call stress(SIG,R,U,NT,N,NP,PARA,INTON,SIMTYPE)
-         call stressp(COR,R,U,R0,U0,NT,N,NP,PARA,INTON,SIMTYPE)
-
-         call energy_elas(EELAS,R,U,NT,N,NP,PARA)
-         EPONP=0.
-         if (INTON.EQ.1) then
-            call energy_ponp(EPONP,R,NT,N,NP,PARA)
-         endif
-         WRITE(2,*) real(TIME),real(EELAS(1)),real(EELAS(2)),real(EELAS(3)),real(EPONP),real(COR)
+        call energy_elas(eelas,r,u,nt,n,np,para)
+        eponp=0.
+        if (inton.eq.1) then
+        call energy_ponp(eponp,r,nt,n,np,para)
+        endif
+        write(2,*) real(time),real(eelas(1)),real(eelas(2)),real(eelas(3)),real(eponp),real(cor)
 
 
-         WRITE(3,*) real(SIG(1,1)),real(SIG(1,2)),real(SIG(1,3)),real(SIG(2,1)),real(SIG(2,2))
-         WRITE(4,*) real(SIG(2,3)),real(SIG(3,1)),real(SIG(3,2)),real(SIG(3,3))
+        write(3,*) real(sig(1,1)),real(sig(1,2)),real(sig(1,3)),real(sig(2,1)),real(sig(2,2))
+        write(4,*) real(sig(2,3)),real(sig(3,1)),real(sig(3,2)),real(sig(3,3))
 
-         PRINT*, '________________________________________'
-         PRINT*, 'Time point ',IND, ' out of', INDMAX
-         PRINT*, 'Current time ',TIME
-         PRINT*, 'Bending energy ', EELAS(1)
-         PRINT*, 'Par compression energy ', EELAS(2)
-         PRINT*, 'Perp compression energy ', EELAS(3)
-         PRINT*, 'Polymer-polymer energy ', EPONP
-         PRINT*, 'Current number of beads ', N
-         PRINT*, 'Time step ', DT
-         print*, 'End-to-end distance poly 1 ', &
-              sqrt((R(N,1)-R(1,1))**2.+(R(N,2)-R(1,2))**2.+(R(N,3)-R(1,3))**2.)
-         PRINT*, 'Simulation type ', SIMTYPE
+        print*, '________________________________________'
+        print*, 'time point ',ind, ' out of', indmax
+        print*, 'current time ',time
+        print*, 'bending energy ', eelas(1)
+        print*, 'par compression energy ', eelas(2)
+        print*, 'perp compression energy ', eelas(3)
+        print*, 'polymer-polymer energy ', eponp
+        print*, 'current number of beads ', n
+        print*, 'time step ', dt
+        print*, 'end-to-end distance poly 1 ', norm2(r(n,:) - r(1,:))
+        print*, 'simulation type ', simtype
 
-         IND=IND+1
+        ind=ind+1
 
-      ENDDO
-      END
+    enddo
+    end
 
 
 !---------------------------------------------------------------*
