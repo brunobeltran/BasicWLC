@@ -72,7 +72,7 @@
 !     Variable to hold time of first collisions between each bead
       DOUBLE PRECISION HAS_COLLIDED(NT,NT)
       DOUBLE PRECISION FPT_DIST ! l1 dist to trigger collision
-      INTEGER COL_TYPE ! algorithm to use for collision detection
+      INTEGER, INTENT(IN) :: COL_TYPE ! algorithm to use for collision detection
 
 !     Load the input parameters
 
