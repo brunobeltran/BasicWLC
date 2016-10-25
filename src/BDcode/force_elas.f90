@@ -153,12 +153,13 @@
                FELAS(IB+1,2)=FELAS(IB+1,2)-EPAR*DR(2)
                FELAS(IB+1,3)=FELAS(IB+1,3)-EPAR*DR(3)
 
-               TELAS(IB,1)=0.
-               TELAS(IB,2)=0.
-               TELAS(IB,3)=0.
-               TELAS(IB+1,1)=0.
-               TELAS(IB+1,2)=0.
-               TELAS(IB+1,3)=0.
+!               Already set to 0 in initialization
+!                TELAS(IB,1)=0.
+!                TELAS(IB,2)=0.
+!                TELAS(IB,3)=0.
+!                TELAS(IB+1,1)=0.
+!                TELAS(IB+1,2)=0.
+!                TELAS(IB+1,3)=0.
 
             endif
 

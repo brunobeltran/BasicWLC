@@ -1,0 +1,155 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Introducing the WormLike Chain SIMulator &#8212; wlcsim 0.1 documentation</title>
+    
+    <link rel="stylesheet" href="_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '0.1',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="wlcsim 0.1 documentation" href="index.html" />
+    <link rel="next" title="Running Simulations" href="running.html" />
+    <link rel="prev" title="Welcome to wlcsim’s documentation!" href="index.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="running.html" title="Running Simulations"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="index.html" title="Welcome to wlcsim’s documentation!"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">wlcsim 0.1 documentation</a> &#187;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="introducing-the-wormlike-chain-simulator">
+<h1>Introducing the WormLike Chain SIMulator<a class="headerlink" href="#introducing-the-wormlike-chain-simulator" title="Permalink to this headline">¶</a></h1>
+<p>This code is designed to efficiently simulate the wormlike chain polymer model
+using various coarse-grainings where applicable.</p>
+<p>For very stiff polymers, the usual wormlike chain is simulated.</p>
+<p>For relatively more flexible polymers, the &#8220;stretchable, shearable&#8221; chain is
+used.</p>
+<p>For <em>VERY</em> stretchable polymers, a purely Gaussian chain is used.</p>
+<div class="section" id="id1">
+<h2>Quickstart<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h2>
+<p>Simply typing <code class="docutils literal"><span class="pre">make</span></code> in the top level directory will build the simulator
+from source. The executable created (<code class="docutils literal"><span class="pre">wlcsim.exe</span></code>) will use the parameters in
+the file <code class="docutils literal"><span class="pre">input/input</span></code> and write its output to the <code class="docutils literal"><span class="pre">data</span></code> directory.
+To force a rerun without having to manually delete all the old output files, you
+can also simply type <code class="docutils literal"><span class="pre">make</span> <span class="pre">run</span></code> at any time.</p>
+<p>The output can be vizualized using the PyMol scripts in the <code class="docutils literal"><span class="pre">vizualization</span></code>
+directory or by hand using the output in the <code class="docutils literal"><span class="pre">data</span></code> directory, which contains
+rank two arrays of shape <code class="docutils literal"><span class="pre">num_beads*num_polymers-by-3</span></code>, with one file per time
+point. Specifying multiple polymers just simulates them in parallel in the same
+reaction volume, no interactions are assumed. For more complex analysis, see
+<a class="reference internal" href="analyzing.html"><span class="doc">Analyzing Simulation Output</span></a>.</p>
+<p>To scan parameters, the Python script <code class="docutils literal"><span class="pre">scan_wlcsim.py</span></code> should be used. It takes
+care of saving the current git commit_hash, all inputs, etc. into a unique
+directory, preventing race conditions even on shared filesystems. For more
+details, see <a class="reference internal" href="running.html"><span class="doc">Running Simulations</span></a>.</p>
+</div>
+<div class="section" id="id2">
+<h2>Disclaimer<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h2>
+<p>This codebase is internal to the Spakowitz lab and is not guaranteed to be
+bug-free at any point. For battle-tested versions of our software, please see
+the links in the relevant papers.</p>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">Introducing the WormLike Chain SIMulator</a><ul>
+<li><a class="reference internal" href="#id1">Quickstart</a></li>
+<li><a class="reference internal" href="#id2">Disclaimer</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="index.html"
+                        title="previous chapter">Welcome to wlcsim&#8217;s documentation!</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="running.html"
+                        title="next chapter">Running Simulations</a></p>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/intro.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <div><input type="text" name="q" /></div>
+      <div><input type="submit" value="Go" /></div>
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="running.html" title="Running Simulations"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="index.html" title="Welcome to wlcsim’s documentation!"
+             >previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">wlcsim 0.1 documentation</a> &#187;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2016, Andrew Spakowitz, Bruno Beltran, Sarah Sandholtz, Quinn MacPherson, Shifan Mao, Elena Koslover.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.4.6.
+    </div>
+  </body>
+</html>

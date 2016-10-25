@@ -1,0 +1,20 @@
+multiprocessing.pool.RemoteTraceback: 
+"""
+Traceback (most recent call last):
+  File "/home/bbeltr1/.miniconda3/lib/python3.5/multiprocessing/pool.py", line 119, in worker
+    result = (True, func(*args, **kwds))
+  File "scan_wlcsim.py", line 111, in run_wlcsim
+    shutil.copytree('input', os.path.join(run_dir, 'input'))
+  File "/home/bbeltr1/.miniconda3/lib/python3.5/shutil.py", line 353, in copytree
+    raise Error(errors)
+shutil.Error: [('input/.input.swp', 'par-run-dir/small-chains-verification/tower8.1604/input/.input.swp', "[Errno 2] No such file or directory: 'input/.input.swp'")]
+"""
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "scan_wlcsim.py", line 133, in <module>
+    for params in p.imap_unordered(run_wlcsim, scan.params(), chunksize=1):
+  File "/home/bbeltr1/.miniconda3/lib/python3.5/multiprocessing/pool.py", line 695, in next
+    raise value
+shutil.Error: [('input/.input.swp', 'par-run-dir/small-chains-verification/tower8.1604/input/.input.swp', "[Errno 2] No such file or directory: 'input/.input.swp'")]

@@ -1,0 +1,62 @@
+nohup: ignoring input
+Process ForkPoolWorker-4:
+Traceback (most recent call last):
+  File "/home/bbeltr1/.miniconda3/lib/python3.5/multiprocessing/process.py", line 249, in _bootstrap
+    self.run()
+  File "/home/bbeltr1/.miniconda3/lib/python3.5/multiprocessing/process.py", line 93, in run
+    self._target(*self._args, **self._kwargs)
+  File "/home/bbeltr1/.miniconda3/lib/python3.5/multiprocessing/pool.py", line 119, in worker
+    result = (True, func(*args, **kwds))
+  File "scan_wlcsim.py", line 125, in run_wlcsim
+    subprocess.run(['time', './wlcsim.exe'], stdout=f, stderr=subprocess.STDOUT)
+  File "/home/bbeltr1/.miniconda3/lib/python3.5/subprocess.py", line 695, in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+  File "/home/bbeltr1/.miniconda3/lib/python3.5/subprocess.py", line 1064, in communicate
+    self.wait()
+  File "/home/bbeltr1/.miniconda3/lib/python3.5/subprocess.py", line 1658, in wait
+    (pid, sts) = self._try_wait(0)
+  File "/home/bbeltr1/.miniconda3/lib/python3.5/subprocess.py", line 1608, in _try_wait
+    (pid, sts) = os.waitpid(self.pid, wait_flags)
+KeyboardInterrupt
+Process ForkPoolWorker-8:
+Traceback (most recent call last):
+  File "/home/bbeltr1/.miniconda3/lib/python3.5/multiprocessing/process.py", line 249, in _bootstrap
+    self.run()
+  File "/home/bbeltr1/.miniconda3/lib/python3.5/multiprocessing/process.py", line 93, in run
+    self._target(*self._args, **self._kwargs)
+  File "/home/bbeltr1/.miniconda3/lib/python3.5/multiprocessing/pool.py", line 119, in worker
+    result = (True, func(*args, **kwds))
+  File "scan_wlcsim.py", line 125, in run_wlcsim
+    subprocess.run(['time', './wlcsim.exe'], stdout=f, stderr=subprocess.STDOUT)
+  File "/home/bbeltr1/.miniconda3/lib/python3.5/subprocess.py", line 695, in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+  File "/home/bbeltr1/.miniconda3/lib/python3.5/subprocess.py", line 1064, in communicate
+    self.wait()
+  File "/home/bbeltr1/.miniconda3/lib/python3.5/subprocess.py", line 1658, in wait
+    (pid, sts) = self._try_wait(0)
+  File "/home/bbeltr1/.miniconda3/lib/python3.5/subprocess.py", line 1608, in _try_wait
+    (pid, sts) = os.waitpid(self.pid, wait_flags)
+KeyboardInterrupt
+Traceback (most recent call last):
+  File "/home/bbeltr1/.miniconda3/lib/python3.5/multiprocessing/pool.py", line 680, in next
+    item = self._items.popleft()
+IndexError: pop from an empty deque
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "scan_wlcsim.py", line 133, in <module>
+    for params in p.imap_unordered(run_wlcsim, scan.params(), chunksize=1):
+  File "/home/bbeltr1/.miniconda3/lib/python3.5/multiprocessing/pool.py", line 684, in next
+    self._cond.wait(timeout)
+  File "/home/bbeltr1/.miniconda3/lib/python3.5/threading.py", line 293, in wait
+    waiter.acquire()
+KeyboardInterrupt
+ stdout, stderr = process.communicate(input, timeout=timeout)
+  File "/home/bbeltr1/.miniconda3/lib/python3.5/subprocess.py", line 1064, in communicate
+    self.wait()
+  File "/home/bbeltr1/.miniconda3/lib/python3.5/subprocess.py", line 1658, in wait
+    (pid, sts) = self._try_wait(0)
+  File "/home/bbeltr1/.miniconda3/lib/python3.5/subprocess.py", line 1608, in _try_wait
+    (pid, sts) = os.waitpid(self.pid, wait_flags)
+KeyboardInterrupt

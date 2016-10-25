@@ -19,7 +19,7 @@ count_funcs = []
 # specify where simulations will be run and where output will go
 # you'll probably want to CHANGE run_name FOR EACH PARAMETER SCAN YOU DO to
 # preserve your sanity
-run_name = 'increasing-chain-length-0.1_fpt_dist'
+run_name = 'increasing-chain-length-0.5_fpt_dist'
 output_base = 'par-run-dir'
 
 # the following uses numpy to create arrays of parameters
@@ -28,14 +28,14 @@ output_base = 'par-run-dir'
 
 # to vary parameters combinatorially, list all the values for all parameters
 # you want like this, all combinations will be exected automatically
-params['FPT_DIST'] = np.array([0.1])
-params['DT'] = np.array([0.5])
+params['FPT_DIST'] = np.array([0.5])
+params['DT'] = np.array([0.05])
 # 2 bead chains basically never loop since no bend
 # similarly, < 1 bead per persistence length seems to give silly answers
 # similarly, < 2 bead per persistence length quantitatively incorrect answers
 params['TF'] = np.array([10000000]) # max sim time
-params['INDMAX'] = np.array([10000]) # max num saves (determines save freq)
-params['SAVE_RU'] = np.array([0])
+params['INDMAX'] = np.array([1000]) # max num saves (determines save freq)
+params['SAVE_RU'] = np.array([1])
 params['EXIT_WHEN_COLLIDED'] = np.array([1])
 # to vary parameters jointly, make dictionaries with values of matching size
 # like this. see pscan.py for more details.

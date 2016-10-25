@@ -1,0 +1,206 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>wlcsim.analyze &#8212; wlcsim 0.1 documentation</title>
+    
+    <link rel="stylesheet" href="../../_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     '0.1',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="wlcsim 0.1 documentation" href="../../index.html" />
+    <link rel="up" title="Module code" href="../index.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../index.html">wlcsim 0.1 documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../index.html" accesskey="U">Module code</a> &#187;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for wlcsim.analyze</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Currently, dumping place for all analysis routines.&quot;&quot;&quot;</span>
+<span class="kn">from</span> <span class="nn">.</span> <span class="k">import</span> <span class="n">data</span> <span class="k">as</span> <span class="n">wdata</span>
+<span class="kn">from</span> <span class="nn">.utils.multiprocessing_mapreduce</span> <span class="k">import</span> <span class="n">SimpleMapReduce</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<span class="kn">import</span> <span class="nn">glob</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="n">__name__</span><span class="p">)</span>
+
+<span class="n">default_group_params_coltimes</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;linear_distance&#39;</span><span class="p">]</span>
+<span class="k">def</span> <span class="nf">map_mean_coltimes</span><span class="p">(</span><span class="n">sim_dir</span><span class="p">,</span> <span class="n">group_params</span><span class="o">=</span><span class="n">default_group_params_coltimes</span><span class="p">):</span>
+    <span class="n">sim</span> <span class="o">=</span> <span class="n">wdata</span><span class="o">.</span><span class="n">Sim</span><span class="p">(</span><span class="n">sim_dir</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">group_params</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">param</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">sim</span><span class="o">.</span><span class="n">coltimes</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+                <span class="n">sim</span><span class="o">.</span><span class="n">coltimes</span><span class="p">[</span><span class="n">param</span><span class="p">]</span> <span class="o">=</span> <span class="n">sim</span><span class="o">.</span><span class="n">params</span><span class="p">[</span><span class="n">param</span><span class="p">]</span>
+        <span class="n">gb_coltimes</span> <span class="o">=</span> <span class="n">sim</span><span class="o">.</span><span class="n">coltimes</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="n">group_params</span><span class="p">,</span> <span class="n">as_index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">coltime</span>
+    <span class="k">except</span> <span class="ne">OSError</span><span class="p">:</span>
+        <span class="c1"># no coltimes in this simulation dir</span>
+        <span class="k">return</span> <span class="p">[]</span>
+    <span class="n">means</span> <span class="o">=</span> <span class="n">gb_coltimes</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+    <span class="n">nan_counts</span> <span class="o">=</span> <span class="n">gb_coltimes</span><span class="o">.</span><span class="n">agg</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">x</span><span class="p">)))</span>
+    <span class="n">total_counts</span> <span class="o">=</span> <span class="n">gb_coltimes</span><span class="o">.</span><span class="n">size</span><span class="p">()</span>
+    <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="n">means</span><span class="p">,</span> <span class="n">nan_counts</span><span class="p">,</span> <span class="n">total_counts</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+                   <span class="n">keys</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;mean_coltime&#39;</span><span class="p">,</span> <span class="s1">&#39;coltime_nan_count&#39;</span><span class="p">,</span> <span class="s1">&#39;coltime_count&#39;</span><span class="p">])</span>
+    <span class="c1"># this will flatten a multi-index if it exists, else no-op</span>
+    <span class="n">df</span><span class="o">.</span><span class="n">index</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">values</span>
+    <span class="c1"># with a flattened multiindex, we can transpose to get out the three values</span>
+    <span class="c1"># as a Series</span>
+    <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">df</span><span class="o">.</span><span class="n">T</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
+
+<div class="viewcode-block" id="MapMeanColtimes"><a class="viewcode-back" href="../../wlcsim.html#wlcsim.analyze.MapMeanColtimes">[docs]</a><span class="k">class</span> <span class="nc">MapMeanColtimes</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Function object, allows the same-named method to be passed to</span>
+<span class="sd">    Pool.map&quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">group_params</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">group_params</span> <span class="o">=</span> <span class="n">group_params</span>
+    <span class="k">def</span> <span class="nf">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sim_dir</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">map_mean_coltimes</span><span class="p">(</span><span class="n">sim_dir</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">group_params</span><span class="p">)</span></div>
+
+
+<span class="k">def</span> <span class="nf">reduce_mean_coltimes</span><span class="p">(</span><span class="n">item</span><span class="p">):</span>
+    <span class="n">param_vals</span><span class="p">,</span> <span class="n">coltime_stats</span> <span class="o">=</span> <span class="n">item</span>
+    <span class="c1"># concat will put the param_vals as the column (then .T to row) names</span>
+    <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">coltime_stats</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">T</span>
+    <span class="c1"># all indexes will match (== param_vals), so we will get one row at end</span>
+    <span class="n">row</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="n">df</span><span class="o">.</span><span class="n">index</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s1">&#39;mean_coltime&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">,</span>
+                                    <span class="s1">&#39;coltime_nan_count&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">,</span>
+                                    <span class="s1">&#39;coltime_count&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">})</span>
+    <span class="c1"># the key of the single row is param_vals, so we can just</span>
+    <span class="c1"># return next(row.T.items())</span>
+    <span class="c1"># but honestly, keeping it in tuple form is annoying, since we will</span>
+    <span class="c1"># just concatenate all the reduced results afterwards anyway, so we just</span>
+    <span class="k">return</span> <span class="n">row</span>
+
+<span class="k">def</span> <span class="nf">reduce_rigid_mean_coltimes</span><span class="p">(</span><span class="n">item</span><span class="p">):</span>
+    <span class="n">param_vals</span><span class="p">,</span> <span class="n">coltime_stats</span> <span class="o">=</span> <span class="n">item</span>
+    <span class="c1"># concat will put the param_vals as the column (then .T to row) names</span>
+    <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">coltime_stats</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">T</span>
+    <span class="c1"># all indexes will match (== param_vals), so we will get one row at end</span>
+    <span class="n">df</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="n">df</span><span class="p">[</span><span class="s1">&#39;nan_counts&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">]</span>
+    <span class="n">row</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="n">df</span><span class="o">.</span><span class="n">index</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s1">&#39;mean_coltime&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">,</span>
+                                    <span class="s1">&#39;coltime_nan_count&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">,</span>
+                                    <span class="s1">&#39;coltime_count&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">})</span>
+    <span class="c1"># the key of the single row is param_vals, so we can just</span>
+    <span class="c1"># return next(row.T.items())</span>
+    <span class="c1"># but honestly, keeping it in tuple form is annoying, since we will</span>
+    <span class="c1"># just concatenate all the reduced results afterwards anyway, so we just</span>
+    <span class="k">return</span> <span class="n">row</span>
+
+<div class="viewcode-block" id="striding_map_mean_coltimes"><a class="viewcode-back" href="../../wlcsim.html#wlcsim.analyze.striding_map_mean_coltimes">[docs]</a><span class="k">def</span> <span class="nf">striding_map_mean_coltimes</span><span class="p">(</span><span class="n">sim_dir</span><span class="p">,</span> <span class="n">idx_gap</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+                               <span class="n">group_params</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;linear_distance&#39;</span><span class="p">]):</span>
+    <span class="sd">&quot;&quot;&quot;Not yet implemented. In the future, this should calculate the mean</span>
+<span class="sd">    for a particular simulation of all the beads of each separation possible,</span>
+<span class="sd">    without overlapping looped sections. Gah. Don&#39;t feel like typing that</span>
+<span class="sd">    better.&quot;&quot;&quot;</span>
+    <span class="k">pass</span></div>
+
+<span class="k">def</span> <span class="nf">map_reduce_mean_coltimes</span><span class="p">(</span><span class="n">run_dir</span><span class="p">,</span> <span class="n">num_workers</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                             <span class="n">group_params</span><span class="o">=</span><span class="n">default_group_params_coltimes</span><span class="p">,</span>
+                             <span class="n">be_rigid</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">pool_type</span><span class="o">=</span><span class="s1">&#39;process&#39;</span><span class="p">):</span>
+    <span class="c1"># write necessary csv files if not already there</span>
+    <span class="n">wdata</span><span class="o">.</span><span class="n">write_coltimes_csvs</span><span class="p">(</span><span class="n">run_dir</span><span class="p">)</span>
+    <span class="c1"># get list of simulation directories to map over</span>
+    <span class="n">sim_dirs</span> <span class="o">=</span> <span class="n">wdata</span><span class="o">.</span><span class="n">Scan</span><span class="p">(</span><span class="n">run_dir</span><span class="p">)</span><span class="o">.</span><span class="n">sim_paths</span>
+    <span class="c1"># construct the MapReduce-r</span>
+    <span class="n">map_func</span> <span class="o">=</span> <span class="n">MapMeanColtimes</span><span class="p">(</span><span class="n">group_params</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">be_rigid</span><span class="p">:</span>
+        <span class="n">reduce_func</span> <span class="o">=</span> <span class="n">reduce_rigid_mean_coltimes</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">reduce_func</span> <span class="o">=</span> <span class="n">reduce_mean_coltimes</span>
+    <span class="n">mapper</span> <span class="o">=</span> <span class="n">SimpleMapReduce</span><span class="p">(</span><span class="n">map_func</span><span class="p">,</span> <span class="n">reduce_func</span><span class="p">,</span> <span class="n">num_workers</span><span class="o">=</span><span class="n">num_workers</span><span class="p">)</span>
+    <span class="c1"># return a dataframe containing all the stats calculated</span>
+    <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">mapper</span><span class="p">(</span><span class="n">sim_dirs</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    <span class="n">df</span><span class="o">.</span><span class="n">index</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">MultiIndex</span><span class="o">.</span><span class="n">from_tuples</span><span class="p">(</span><span class="n">df</span><span class="o">.</span><span class="n">index</span><span class="p">,</span> <span class="n">names</span><span class="o">=</span><span class="n">group_params</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">df</span>
+
+
+<div class="viewcode-block" id="map_cdf_coltimes"><a class="viewcode-back" href="../../wlcsim.html#wlcsim.analyze.map_cdf_coltimes">[docs]</a><span class="k">def</span> <span class="nf">map_cdf_coltimes</span><span class="p">(</span><span class="n">sim_dir</span><span class="p">,</span> <span class="n">dt</span><span class="p">,</span> <span class="n">group_params</span><span class="o">=</span><span class="n">default_group_params_coltimes</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;TODO: actually implement&quot;&quot;&quot;</span>
+    <span class="n">sim</span> <span class="o">=</span> <span class="n">wdata</span><span class="o">.</span><span class="n">Sim</span><span class="p">(</span><span class="n">sim_dir</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">group_params</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">param</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">sim</span><span class="o">.</span><span class="n">coltimes</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+                <span class="n">sim</span><span class="o">.</span><span class="n">coltimes</span><span class="p">[</span><span class="n">param</span><span class="p">]</span> <span class="o">=</span> <span class="n">sim</span><span class="o">.</span><span class="n">params</span><span class="p">[</span><span class="n">param</span><span class="p">]</span>
+        <span class="n">gb_coltimes</span> <span class="o">=</span> <span class="n">sim</span><span class="o">.</span><span class="n">coltimes</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="n">group_params</span><span class="p">,</span> <span class="n">as_index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">coltime</span>
+    <span class="k">except</span> <span class="ne">OSError</span><span class="p">:</span>
+        <span class="c1"># no coltimes in this simulation dir</span>
+        <span class="k">return</span> <span class="p">[]</span>
+
+    <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">([],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+                   <span class="n">keys</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;mean_coltime&#39;</span><span class="p">,</span> <span class="s1">&#39;coltime_nan_count&#39;</span><span class="p">,</span> <span class="s1">&#39;coltime_count&#39;</span><span class="p">])</span>
+    <span class="c1"># this will flatten a multi-index if it exists, else no-op</span>
+    <span class="n">df</span><span class="o">.</span><span class="n">index</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">values</span>
+    <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">df</span><span class="o">.</span><span class="n">T</span><span class="o">.</span><span class="n">items</span><span class="p">())</span></div>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <div><input type="text" name="q" /></div>
+      <div><input type="submit" value="Go" /></div>
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../index.html">wlcsim 0.1 documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../index.html" >Module code</a> &#187;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2016, Andrew Spakowitz, Bruno Beltran, Sarah Sandholtz, Quinn MacPherson, Shifan Mao, Elena Koslover.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.4.6.
+    </div>
+  </body>
+</html>

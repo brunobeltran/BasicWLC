@@ -23,7 +23,7 @@
 
  !-Record 6
  !  N               Number of beads
-  51
+  11
 
  !-Record 7         Sarah was running 1000
  !  NP              Number of polymers - won't interact unless interaction code added
@@ -71,14 +71,26 @@
 
  !-Record 18       Algorithm for collision detection: 0) NONE 1) brute force,
  !  COL_TYPE       2) k-d tree, 3) Bruno's O(n) v1,
-  3
+  0
 
  !-Record 19       Whether to save the positions/momentums at each time point
- !  SAVE_RU
+ !  SAVE_RU        0) don't save. 1) save at every time point. 2) overwrite save at each time point
   1
 
  !-Record 20       Whether to terminate simulation when all collisions finish
  !  EXIT_WHEN_COLLIDED
+  0
+
+ !-Record 21       What kind of confinement, if any, exists
+ !  CONFINEMENT
+  0
+
+ !-Record 22       First parameter controlling confiment, see code for details
+ !  CONFP1
+  0
+
+ !-Record 23       Second parameter controlling confiment, see code for details
+ !  CONFP2
   0
 
  ! ----------------------------------------------------

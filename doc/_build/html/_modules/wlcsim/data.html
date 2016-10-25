@@ -1,0 +1,591 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>wlcsim.data &#8212; wlcsim 0.1 documentation</title>
+    
+    <link rel="stylesheet" href="../../_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     '0.1',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="wlcsim 0.1 documentation" href="../../index.html" />
+    <link rel="up" title="Module code" href="../index.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../index.html">wlcsim 0.1 documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../index.html" accesskey="U">Module code</a> &#187;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for wlcsim.data</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot; This module &quot;understands&quot; wlcsim.exe&#39;s output, and will make it into</span>
+<span class="sd">nice, pretty numpy/pandas arrays for you.&quot;&quot;&quot;</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">glob</span>
+<span class="kn">import</span> <span class="nn">re</span>
+<span class="kn">from</span> <span class="nn">.</span> <span class="k">import</span> <span class="nb">input</span> <span class="k">as</span> <span class="n">winput</span>
+<span class="kn">from</span> <span class="nn">.utils.cached_property</span> <span class="k">import</span> <span class="n">cached_property</span>
+<span class="kn">from</span> <span class="nn">.utils.path</span> <span class="k">import</span> <span class="n">path_parts</span>
+<span class="kn">import</span> <span class="nn">shutil</span>
+
+<span class="kn">from</span> <span class="nn">numba</span> <span class="k">import</span> <span class="n">double</span>
+<span class="kn">from</span> <span class="nn">numba.decorators</span> <span class="k">import</span> <span class="n">jit</span><span class="p">,</span> <span class="n">autojit</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="n">__name__</span><span class="p">)</span>
+
+<span class="c1"># keep these arround for cache reasons</span>
+<span class="c1"># initialize with size 1</span>
+<span class="n">i_arr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mi">1</span><span class="p">]])</span>
+<span class="n">j_arr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mi">1</span><span class="p">]])</span>
+<span class="n">ui</span> <span class="o">=</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">]),</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">]))</span>
+
+<span class="c1"># default filenames</span>
+<span class="n">default_sims_csv</span> <span class="o">=</span> <span class="s1">&#39;all_simulations.csv&#39;</span>
+
+<span class="nd">@autojit</span>
+<div class="viewcode-block" id="pairwise_distances3"><a class="viewcode-back" href="../../wlcsim.html#wlcsim.data.pairwise_distances3">[docs]</a><span class="k">def</span> <span class="nf">pairwise_distances3</span><span class="p">(</span><span class="n">r</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Returns np.array of pairwise distances of points in R^3 stored in a</span>
+<span class="sd">    3-by-num_points numpy array.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="n">r</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">dr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="n">n</span><span class="p">,</span> <span class="n">n</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
+            <span class="n">d</span> <span class="o">=</span> <span class="mf">0.0</span>
+            <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">):</span>
+                <span class="n">tmp</span> <span class="o">=</span> <span class="n">r</span><span class="p">[</span><span class="n">k</span><span class="p">,</span> <span class="n">i</span><span class="p">]</span> <span class="o">-</span> <span class="n">r</span><span class="p">[</span><span class="n">k</span><span class="p">,</span> <span class="n">j</span><span class="p">]</span>
+                <span class="n">d</span> <span class="o">+=</span> <span class="n">tmp</span><span class="o">*</span><span class="n">tmp</span>
+            <span class="n">dr</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">d</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">dr</span></div>
+
+
+<span class="k">def</span> <span class="nf">df_from_coltimes_method3</span><span class="p">(</span><span class="n">coltimes</span><span class="p">):</span>
+    <span class="c1"># for caching</span>
+    <span class="k">global</span> <span class="n">i_arr</span>
+    <span class="k">global</span> <span class="n">j_arr</span>
+    <span class="k">global</span> <span class="n">ui</span>
+    <span class="c1"># method 3: manipulate numpy arrays directly. about same speed as</span>
+    <span class="c1"># method #2, but insanely more complex to reason about</span>
+    <span class="n">N</span> <span class="o">=</span> <span class="n">coltimes</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">j_arr</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="n">coltimes</span><span class="o">.</span><span class="n">shape</span><span class="p">):</span>
+        <span class="n">j_arr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">N</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">N</span><span class="p">)</span>
+        <span class="n">j_arr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">tile</span><span class="p">(</span><span class="n">j_arr</span><span class="p">,</span> <span class="p">(</span><span class="n">N</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+        <span class="n">i_arr</span> <span class="o">=</span> <span class="n">j_arr</span><span class="o">.</span><span class="n">T</span>
+        <span class="n">j_arr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">j_arr</span><span class="p">,</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">product</span><span class="p">(</span><span class="n">j_arr</span><span class="o">.</span><span class="n">shape</span><span class="p">),</span> <span class="mi">1</span><span class="p">))</span>
+        <span class="n">i_arr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">i_arr</span><span class="p">,</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">product</span><span class="p">(</span><span class="n">i_arr</span><span class="o">.</span><span class="n">shape</span><span class="p">),</span> <span class="mi">1</span><span class="p">))</span>
+        <span class="n">ui</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">triu_indices</span><span class="p">(</span><span class="n">N</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    <span class="n">coltimes</span><span class="p">[</span><span class="n">ui</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
+    <span class="n">coltimes_lin</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">coltimes</span><span class="p">,</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">product</span><span class="p">(</span><span class="n">coltimes</span><span class="o">.</span><span class="n">shape</span><span class="p">),</span> <span class="mi">1</span><span class="p">))</span>
+    <span class="n">to_keep_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">logical_not</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">coltimes_lin</span><span class="p">))</span>
+    <span class="n">coltimes_lin</span> <span class="o">=</span> <span class="n">coltimes_lin</span><span class="p">[</span><span class="n">to_keep_idx</span><span class="p">]</span>
+    <span class="n">i_lin</span> <span class="o">=</span> <span class="n">i_arr</span><span class="p">[</span><span class="n">to_keep_idx</span><span class="p">]</span>
+    <span class="n">j_lin</span> <span class="o">=</span> <span class="n">j_arr</span><span class="p">[</span><span class="n">to_keep_idx</span><span class="p">]</span>
+    <span class="n">coltimes</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">vstack</span><span class="p">((</span><span class="n">coltimes_lin</span><span class="p">,</span> <span class="n">i_lin</span><span class="p">,</span> <span class="n">j_lin</span><span class="p">))</span><span class="o">.</span><span class="n">T</span>
+    <span class="k">if</span> <span class="n">coltimes</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">coltimes</span> <span class="o">=</span> <span class="n">coltimes</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">coltimes</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">coltimes</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="p">(</span><span class="s1">&#39;coltime&#39;</span><span class="p">,</span> <span class="s1">&#39;i&#39;</span><span class="p">,</span> <span class="s1">&#39;j&#39;</span><span class="p">))</span>
+
+<span class="k">def</span> <span class="nf">df_from_coltimes_method2</span><span class="p">(</span><span class="n">coltimes</span><span class="p">):</span>
+    <span class="c1">## # turns out this is slow compared to pandas or textreader</span>
+    <span class="c1">##coltimes = np.loadtxt(coltimes_file)</span>
+    <span class="c1"># method 2: still slow from creating Series?</span>
+    <span class="n">coltimes_serieses</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="c1"># make a Series out of the lower triangular part of coltimes matrix</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">coltimes</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]):</span>
+        <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">i</span><span class="o">-</span><span class="mi">1</span><span class="p">):</span>
+            <span class="c1"># method 2: still slow from creating Series?</span>
+            <span class="n">coltimes_serieses</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">({</span>
+                    <span class="s1">&#39;i&#39;</span><span class="p">:</span> <span class="n">i</span><span class="p">,</span> <span class="s1">&#39;j&#39;</span><span class="p">:</span> <span class="n">j</span><span class="p">,</span>
+                    <span class="s1">&#39;coltime&#39;</span><span class="p">:</span> <span class="n">coltimes</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="n">j</span><span class="p">]}))</span>
+            <span class="c1"># # method 1: this causes N reallocations, super slow</span>
+            <span class="c1"># self.coltimes = self.coltimes.append(</span>
+            <span class="c1">#     pd.Series({&#39;i&#39;: i, &#39;j&#39;: j,</span>
+            <span class="c1">#                &#39;coltime&#39;: coltimes[i][j]}),</span>
+            <span class="c1">#     ignore_index=True</span>
+            <span class="c1"># )</span>
+    <span class="c1"># method 2: still slow from creating Series?</span>
+    <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">coltimes_serieses</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">df_from_coltimes_method1</span><span class="p">(</span><span class="n">coltimes</span><span class="p">):</span>
+    <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">()</span>
+    <span class="c1"># make a Series out of the lower triangular part of coltimes matrix</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">coltimes</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]):</span>
+        <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">i</span><span class="o">-</span><span class="mi">1</span><span class="p">):</span>
+            <span class="c1"># method 1: this causes N reallocations, super slow</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">coltimes</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">({</span><span class="s1">&#39;i&#39;</span><span class="p">:</span> <span class="n">i</span><span class="p">,</span> <span class="s1">&#39;j&#39;</span><span class="p">:</span> <span class="n">j</span><span class="p">,</span>
+                           <span class="s1">&#39;coltime&#39;</span><span class="p">:</span> <span class="n">coltimes</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="n">j</span><span class="p">]}),</span>
+                <span class="n">ignore_index</span><span class="o">=</span><span class="kc">True</span>
+            <span class="p">)</span>
+    <span class="c1"># method 2: still slow from creating Series?</span>
+    <span class="k">return</span> <span class="n">df</span>
+
+
+<div class="viewcode-block" id="Sim"><a class="viewcode-back" href="../../wlcsim.html#wlcsim.data.Sim">[docs]</a><span class="k">class</span> <span class="nc">Sim</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Sim provides an interface to the heterogenous data produced by a</span>
+<span class="sd">    simulation that saves coltimes, positions, and momentums.</span>
+
+<span class="sd">    Unless specified during initialization, the coltimes, r, and u are loaded</span>
+<span class="sd">    on demand upon first access.</span>
+
+<span class="sd">    Accessing properties of this class for the first time can return an IOError</span>
+<span class="sd">    if a file is moved, or doesn&#39;t exist. Afterwards, the values will be cached.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sim_path</span><span class="p">,</span> <span class="n">overwrite_coltimes</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">load_method</span><span class="o">=</span><span class="mi">3</span><span class="p">):</span>
+        <span class="c1"># since these are all lazily evaluated, we throw exceptions right away</span>
+        <span class="c1"># if the files we need do not exist, to prevent long running programs</span>
+        <span class="c1"># from throwing an exception midway</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isdir</span><span class="p">(</span><span class="n">sim_path</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span><span class="s1">&#39;Directory (&#39;</span> <span class="o">+</span> <span class="n">sim_path</span> <span class="o">+</span>
+                                    <span class="s1">&#39;) provided when constructing&#39;</span>
+                                    <span class="s1">&#39; wlcsim.data.Sim does not exist!&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sim_path</span> <span class="o">=</span> <span class="n">sim_path</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sim_dir</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">sim_path</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">input_file</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">sim_path</span><span class="p">,</span> <span class="s1">&#39;input&#39;</span><span class="p">,</span> <span class="s1">&#39;input&#39;</span><span class="p">)</span>
+        <span class="c1"># without input file, we don&#39;t really have a chance of using the</span>
+        <span class="c1"># simulation data from a simulation anyway, so we can safely error out</span>
+        <span class="c1"># here</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isfile</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">input_file</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">input_file</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">sim_path</span><span class="p">,</span> <span class="s1">&#39;data&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">coltimes_file</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span><span class="p">,</span> <span class="s1">&#39;coltimes&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">overwrite_coltimes</span> <span class="o">=</span> <span class="n">overwrite_coltimes</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_rfile_base</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span><span class="p">,</span> <span class="s1">&#39;r&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ufile_base</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_dir</span><span class="p">,</span> <span class="s1">&#39;u&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">load_method</span> <span class="o">=</span> <span class="n">load_method</span>
+
+    <span class="nd">@cached_property</span>
+<div class="viewcode-block" id="Sim._coltimes"><a class="viewcode-back" href="../../wlcsim.html#wlcsim.data.Sim._coltimes">[docs]</a>    <span class="k">def</span> <span class="nf">_coltimes</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Keep the original matrix around for convenience.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">coltimes_file</span><span class="p">,</span> <span class="n">delim_whitespace</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                           <span class="n">header</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span><span class="o">.</span><span class="n">values</span></div>
+
+    <span class="nd">@cached_property</span>
+    <span class="k">def</span> <span class="nf">coltimes</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">Sim</span><span class="o">.</span><span class="n">df_from_coltimes</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_coltimes</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">load_method</span><span class="p">)</span>
+
+    <span class="nd">@cached_property</span>
+<div class="viewcode-block" id="Sim.r0"><a class="viewcode-back" href="../../wlcsim.html#wlcsim.data.Sim.r0">[docs]</a>    <span class="k">def</span> <span class="nf">r0</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Numpy array of positions of each particle at each time point. &quot;&quot;&quot;</span>
+        <span class="n">rfile_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rfile_base</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">r0</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">rfile_name</span><span class="p">,</span> <span class="n">delim_whitespace</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">header</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">r0</span><span class="o">.</span><span class="n">values</span><span class="o">.</span><span class="n">T</span></div>
+
+    <span class="nd">@cached_property</span>
+<div class="viewcode-block" id="Sim.u0"><a class="viewcode-back" href="../../wlcsim.html#wlcsim.data.Sim.u0">[docs]</a>    <span class="k">def</span> <span class="nf">u0</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Numpy array of positions of each particle at each time point. &quot;&quot;&quot;</span>
+        <span class="n">ufile_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ufile_base</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">u0</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">rfile_name</span><span class="p">,</span> <span class="n">delim_whitespace</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">header</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">u0</span><span class="o">.</span><span class="n">values</span><span class="o">.</span><span class="n">T</span></div>
+
+    <span class="nd">@cached_property</span>
+<div class="viewcode-block" id="Sim.r"><a class="viewcode-back" href="../../wlcsim.html#wlcsim.data.Sim.r">[docs]</a>    <span class="k">def</span> <span class="nf">r</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Numpy array of positions of each particle at each time point. &quot;&quot;&quot;</span>
+        <span class="n">num_time_points</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">rtime_idxs</span><span class="p">)</span>
+        <span class="n">r</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="n">num_time_points</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="p">[</span><span class="s1">&#39;N&#39;</span><span class="p">]),</span> <span class="mf">0.0</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">ti</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">rtime_idxs</span><span class="p">):</span>
+            <span class="n">rfile_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rfile_base</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">ti</span><span class="p">)</span>
+            <span class="n">ri</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">rfile_name</span><span class="p">,</span> <span class="n">delim_whitespace</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">header</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+            <span class="n">r</span><span class="p">[</span><span class="n">i</span><span class="p">,:,:]</span> <span class="o">=</span> <span class="n">ri</span><span class="o">.</span><span class="n">values</span><span class="o">.</span><span class="n">T</span>
+        <span class="k">return</span> <span class="n">r</span></div>
+
+    <span class="nd">@cached_property</span>
+<div class="viewcode-block" id="Sim.u"><a class="viewcode-back" href="../../wlcsim.html#wlcsim.data.Sim.u">[docs]</a>    <span class="k">def</span> <span class="nf">u</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; Numpy array of positions of each particle at each time point. &quot;&quot;&quot;</span>
+        <span class="n">num_time_points</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">utime_idxs</span><span class="p">)</span>
+        <span class="n">u</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="n">num_time_points</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="p">[</span><span class="s1">&#39;N&#39;</span><span class="p">]),</span> <span class="mf">0.0</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">ti</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">utime_idxs</span><span class="p">):</span>
+            <span class="n">ufile_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ufile_base</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">ti</span><span class="p">)</span>
+            <span class="n">ui</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">ufile_name</span><span class="p">,</span> <span class="n">delim_whitespace</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">header</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+            <span class="n">u</span><span class="p">[</span><span class="n">i</span><span class="p">,:,:]</span> <span class="o">=</span> <span class="n">ui</span><span class="o">.</span><span class="n">values</span><span class="o">.</span><span class="n">T</span>
+        <span class="k">return</span> <span class="n">u</span></div>
+
+    <span class="nd">@cached_property</span>
+    <span class="k">def</span> <span class="nf">rtime_idxs</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">rfiles</span> <span class="o">=</span> <span class="n">glob</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_rfile_base</span> <span class="o">+</span> <span class="s1">&#39;*&#39;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">time_idxs</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_rfile_base</span><span class="p">,</span> <span class="n">rfiles</span><span class="p">)</span>
+
+    <span class="nd">@cached_property</span>
+    <span class="k">def</span> <span class="nf">utime_idxs</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">ufiles</span> <span class="o">=</span> <span class="n">glob</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_ufile_base</span> <span class="o">+</span> <span class="s1">&#39;*&#39;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">time_idxs</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_ufile_base</span><span class="p">,</span> <span class="n">ufiles</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">time_idxs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base</span><span class="p">,</span> <span class="n">file_names</span><span class="p">):</span>
+        <span class="n">number_from_filename</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">re</span><span class="o">.</span><span class="n">escape</span><span class="p">(</span><span class="n">base</span><span class="p">)</span> <span class="o">+</span> <span class="s1">&#39;([0-9]+)&#39;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">number_from_filename</span><span class="p">,</span> <span class="n">file_name</span><span class="p">)</span><span class="o">.</span><span class="n">groups</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+                         <span class="k">for</span> <span class="n">file_name</span> <span class="ow">in</span> <span class="n">file_names</span><span class="p">])</span>
+
+    <span class="nd">@cached_property</span>
+    <span class="k">def</span> <span class="nf">param_names</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">param_names</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">winput</span><span class="o">.</span><span class="n">read_file</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">input_file</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">param_names</span>
+
+    <span class="nd">@cached_property</span>
+    <span class="k">def</span> <span class="nf">params</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">_</span><span class="p">,</span> <span class="n">params</span> <span class="o">=</span> <span class="n">winput</span><span class="o">.</span><span class="n">read_file</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">input_file</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">params</span>
+
+    <span class="nd">@cached_property</span>
+    <span class="k">def</span> <span class="nf">rtimes</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">rtime_idxs</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="p">[</span><span class="s1">&#39;DT&#39;</span><span class="p">]</span>
+
+    <span class="nd">@cached_property</span>
+    <span class="k">def</span> <span class="nf">utimes</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">utime_idxs</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="p">[</span><span class="s1">&#39;DT&#39;</span><span class="p">]</span>
+
+    <span class="nd">@staticmethod</span>
+<div class="viewcode-block" id="Sim.df_from_coltimes"><a class="viewcode-back" href="../../wlcsim.html#wlcsim.data.Sim.df_from_coltimes">[docs]</a>    <span class="k">def</span> <span class="nf">df_from_coltimes</span><span class="p">(</span><span class="n">coltimes</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="mi">3</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Make a DataFrame with the two colliding beads&#39; indices in the polymer</span>
+<span class="sd">        and the first collision time between them as columns.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># coltimes_file = os.path.join(self.data_dir, &#39;coltimes.csv&#39;)</span>
+        <span class="c1"># if os.path.isfile(coltimes_file) and not self.overwrite_coltimes:</span>
+        <span class="c1">#     coltimes = pd.read_csv(coltimes_file, index_col=0)</span>
+        <span class="c1">#     return coltimes</span>
+        <span class="c1"># elif method == 1:</span>
+        <span class="k">if</span> <span class="n">method</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">coltimes</span> <span class="o">=</span> <span class="n">df_from_coltimes_method1</span><span class="p">(</span><span class="n">coltimes</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">method</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="n">coltimes</span> <span class="o">=</span> <span class="n">df_from_coltimes_method2</span><span class="p">(</span><span class="n">coltimes</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">method</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
+            <span class="n">coltimes</span> <span class="o">=</span> <span class="n">df_from_coltimes_method3</span><span class="p">(</span><span class="n">coltimes</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="s1">&#39;load_method=&#39;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">method</span><span class="p">)</span> <span class="o">+</span> <span class="s1">&#39; does not exist!&#39;</span><span class="p">)</span>
+        <span class="n">nan_fill_coltimes</span><span class="p">(</span><span class="n">coltimes</span><span class="p">)</span>
+        <span class="n">add_useful_cols_to_coltimes</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">coltimes</span><span class="p">)</span>
+        <span class="c1"># coltimes.to_csv(coltimes_file)</span>
+        <span class="k">return</span> <span class="n">coltimes</span></div>
+
+<div class="viewcode-block" id="Sim.did_fill_coltimes"><a class="viewcode-back" href="../../wlcsim.html#wlcsim.data.Sim.did_fill_coltimes">[docs]</a>    <span class="k">def</span> <span class="nf">did_fill_coltimes</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;True if the simulation ran long enough that every bead collided with</span>
+<span class="sd">        every other bead. Otherwise False.&quot;&quot;&quot;</span>
+        <span class="n">num_beads</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">coltimes</span><span class="p">)</span>
+        <span class="n">num_possible_collisions</span> <span class="o">=</span> <span class="n">num_beads</span><span class="o">*</span><span class="n">num_beads</span> <span class="o">-</span> <span class="n">num_beads</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_coltimes</span><span class="p">))</span> <span class="o">==</span> <span class="n">num_possible_collisions</span></div></div>
+
+
+
+<div class="viewcode-block" id="nan_fill_coltimes"><a class="viewcode-back" href="../../wlcsim.html#wlcsim.data.nan_fill_coltimes">[docs]</a><span class="k">def</span> <span class="nf">nan_fill_coltimes</span><span class="p">(</span><span class="n">coltimes</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Takes a raw coltimes pandas array from e.g. write_coltimes_csvs and puts</span>
+<span class="sd">    nan&#39;s where the -1.0&#39;s are, i.e. where the simulation did not go out far</span>
+<span class="sd">    enough.&quot;&quot;&quot;</span>
+    <span class="n">coltimes</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">coltimes</span><span class="p">[</span><span class="s1">&#39;coltime&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="s1">&#39;coltime&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span></div>
+
+
+
+<div class="viewcode-block" id="Scan"><a class="viewcode-back" href="../../wlcsim.html#wlcsim.data.Scan">[docs]</a><span class="k">class</span> <span class="nc">Scan</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Can tell you what dirs in a run_dir are simulation directories, and what</span>
+<span class="sd">    all the input files said, and more. &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">run_path</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">run_path</span> <span class="o">=</span> <span class="n">run_path</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">run_dir</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">run_path</span><span class="p">)</span>
+        <span class="n">is_sim</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">d</span><span class="p">:</span> <span class="n">Scan</span><span class="o">.</span><span class="n">is_simdir</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="n">run_path</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sim_dirs</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">filter</span><span class="p">(</span><span class="n">is_sim</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">listdir</span><span class="p">(</span><span class="n">run_path</span><span class="p">)))</span>
+        <span class="n">prepend_path</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">d</span><span class="p">:</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">run_path</span><span class="p">,</span> <span class="n">d</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sim_paths</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="n">prepend_path</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">sim_dirs</span><span class="p">))</span>
+        <span class="c1"># self.wlcsim_data = [Sim(folder, *args, **kwargs) for folder in</span>
+        <span class="c1">#                     glob.glob(os.path.join(run_path, &#39;*.*&#39;))</span>
+        <span class="c1">#                     if os.path.isdir(folder)]</span>
+        <span class="c1"># self.param_names = self.wlcsim_data[0].param_names</span>
+        <span class="c1"># for sim in self.wlcsim_data:</span>
+        <span class="c1">#     sim.coltimes[&#39;run_name&#39;] = sim.sim_dir</span>
+        <span class="c1">#     for param in sim.params:</span>
+        <span class="c1">#         sim.coltimes[param] = sim.params[param]</span>
+        <span class="c1"># coltimes = [sim.coltimes for sim in self.wlcsim_data]</span>
+        <span class="c1"># self.coltimes = pd.concat(coltimes)</span>
+        <span class="c1"># self.calculate_linear_distance()</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">is_simdir</span><span class="p">(</span><span class="n">dirname</span><span class="p">,</span> <span class="n">run_path</span><span class="p">):</span>
+        <span class="n">sim_name_re</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="s1">&#39;.*\.[0-9]+&#39;</span><span class="p">)</span>
+        <span class="n">abs_dirname</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">run_path</span><span class="p">,</span> <span class="n">dirname</span><span class="p">)</span>
+        <span class="n">input_file</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">abs_dirname</span><span class="p">,</span> <span class="s1">&#39;input&#39;</span><span class="p">,</span> <span class="s1">&#39;input&#39;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">sim_name_re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">dirname</span><span class="p">)</span> \
+                <span class="ow">and</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isdir</span><span class="p">(</span><span class="n">abs_dirname</span><span class="p">)</span> \
+                <span class="ow">and</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isfile</span><span class="p">(</span><span class="n">input_file</span><span class="p">)</span>
+
+    <span class="nd">@cached_property</span>
+    <span class="k">def</span> <span class="nf">sims</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">Sim</span><span class="p">(</span><span class="n">folder</span><span class="p">)</span> <span class="k">for</span> <span class="n">folder</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">sim_paths</span><span class="p">]</span>
+
+    <span class="nd">@cached_property</span>
+    <span class="k">def</span> <span class="nf">inputs</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">([</span><span class="n">sim</span><span class="o">.</span><span class="n">params</span> <span class="k">for</span> <span class="n">sim</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">sims</span><span class="p">])</span>
+        <span class="c1"># in Bruno&#39;s simulation-saving scheme, this is a unique identifier of a</span>
+        <span class="c1"># particular run of wlcsim. not os.path.join in case someone uses</span>
+        <span class="c1"># windows. this will still be unique since they prohibit &#39;/&#39; in</span>
+        <span class="c1"># filenames</span>
+        <span class="n">df</span><span class="o">.</span><span class="n">index</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">run_dir</span> <span class="o">+</span> <span class="s1">&#39;/&#39;</span> <span class="o">+</span> <span class="n">sim</span><span class="o">.</span><span class="n">sim_dir</span> <span class="k">for</span> <span class="n">sim</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">sims</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">df</span>
+
+    <span class="nd">@cached_property</span>
+    <span class="k">def</span> <span class="nf">all_param_values</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">{</span><span class="n">col</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">inputs</span><span class="p">[</span><span class="n">col</span><span class="p">]</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span> <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">inputs</span><span class="o">.</span><span class="n">columns</span><span class="p">}</span></div>
+
+    <span class="c1"># from back when we used this class to combine coltimes&#39;s from a scan</span>
+    <span class="c1"># into one big pandas df</span>
+    <span class="c1"># def calculate_linear_distance(self):</span>
+        <span class="c1"># # actual distance along polymer is dx*(number_separating)</span>
+        <span class="c1"># self.coltimes[&#39;dx&#39;] = self.coltimes[&#39;L&#39;]/(self.coltimes[&#39;N&#39;] - 1)</span>
+        <span class="c1"># self.coltimes[&#39;linear_distance&#39;] = self.coltimes[&#39;dx&#39;]*np.abs(self.coltimes[&#39;i&#39;] - self.coltimes[&#39;j&#39;])</span>
+    <span class="c1"># def calculate_for_each_param(self, f):</span>
+        <span class="c1"># &quot;&quot;&quot;unimplemented&quot;&quot;&quot;</span>
+        <span class="c1"># pass</span>
+
+<span class="k">def</span> <span class="nf">write_coltimes_csvs</span><span class="p">(</span><span class="n">run_path</span><span class="p">,</span> <span class="n">overwrite</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">folder</span> <span class="ow">in</span> <span class="n">glob</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">run_path</span><span class="p">,</span> <span class="s1">&#39;*.*&#39;</span><span class="p">)):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isdir</span><span class="p">(</span><span class="n">folder</span><span class="p">):</span>
+            <span class="k">continue</span>
+        <span class="n">coltimes_file</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">folder</span><span class="p">,</span> <span class="s1">&#39;coltimes.csv&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">overwrite</span> <span class="ow">and</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isfile</span><span class="p">(</span><span class="n">coltimes_file</span><span class="p">):</span>
+            <span class="k">continue</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">sim</span> <span class="o">=</span> <span class="n">Sim</span><span class="p">(</span><span class="n">folder</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">FileNotFoundError</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s1">&#39;write_coltimes_csvs: Unable to construct sim from&#39;</span> <span class="o">+</span> <span class="n">folder</span><span class="p">)</span>
+            <span class="k">continue</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">sim</span><span class="o">.</span><span class="n">coltimes</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="n">coltimes_file</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">OSError</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s1">&#39;No coltimes file in: &#39;</span> <span class="o">+</span> <span class="n">folder</span><span class="p">)</span>
+            <span class="k">continue</span>
+        <span class="k">except</span> <span class="n">EmptyDataError</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s1">&#39;coltimes file is empty in: &#39;</span> <span class="o">+</span> <span class="n">folder</span><span class="p">)</span>
+            <span class="k">continue</span>
+
+<span class="k">def</span> <span class="nf">write_initial_dists_csvs</span><span class="p">(</span><span class="n">run_path</span><span class="p">,</span> <span class="n">overwrite</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">folder</span> <span class="ow">in</span> <span class="n">glob</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">run_path</span><span class="p">,</span> <span class="s1">&#39;*.*&#39;</span><span class="p">)):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isdir</span><span class="p">(</span><span class="n">folder</span><span class="p">):</span>
+            <span class="k">continue</span>
+        <span class="n">dists_file</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">folder</span><span class="p">,</span> <span class="s1">&#39;initial_dists.csv&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">overwrite</span> <span class="ow">and</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isfile</span><span class="p">(</span><span class="n">dists_file</span><span class="p">):</span>
+            <span class="k">continue</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">sim</span> <span class="o">=</span> <span class="n">Sim</span><span class="p">(</span><span class="n">folder</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">FileNotFoundError</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s1">&#39;write_initial_dists_csvs: Unable to construct sim from&#39;</span> <span class="o">+</span> <span class="n">folder</span><span class="p">)</span>
+            <span class="k">continue</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">savetxt</span><span class="p">(</span><span class="n">dists_file</span><span class="p">,</span> <span class="n">pairwise_distances3</span><span class="p">(</span><span class="n">sim</span><span class="o">.</span><span class="n">r0</span><span class="p">),</span> <span class="n">delimiter</span><span class="o">=</span><span class="s1">&#39;,&#39;</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">OSError</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s1">&#39;r0 not found for: &#39;</span> <span class="o">+</span> <span class="n">folder</span><span class="p">)</span>
+            <span class="k">continue</span>
+        <span class="k">except</span> <span class="n">EmptyDataError</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s1">&#39;r0 file is empty in: &#39;</span> <span class="o">+</span> <span class="n">folder</span><span class="p">)</span>
+            <span class="k">continue</span>
+
+<span class="k">def</span> <span class="nf">write_coltimes_pkls</span><span class="p">(</span><span class="n">run_path</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">folder</span> <span class="ow">in</span> <span class="n">glob</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">run_path</span><span class="p">,</span> <span class="s1">&#39;*.*&#39;</span><span class="p">)):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isdir</span><span class="p">(</span><span class="n">folder</span><span class="p">):</span>
+            <span class="k">continue</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">sim</span> <span class="o">=</span> <span class="n">Sim</span><span class="p">(</span><span class="n">folder</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">FileNotFoundError</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s1">&#39;write_coltimes_pkls: Unable to construct sim from&#39;</span> <span class="o">+</span> <span class="n">folder</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">sim</span><span class="o">.</span><span class="n">coltimes</span><span class="o">.</span><span class="n">to_pickle</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">folder</span><span class="p">,</span> <span class="s1">&#39;coltimes.pkl&#39;</span><span class="p">))</span>
+        <span class="k">except</span> <span class="ne">OSError</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s1">&#39;No coltimes file in: &#39;</span> <span class="o">+</span> <span class="n">folder</span><span class="p">)</span>
+            <span class="k">continue</span>
+        <span class="k">except</span> <span class="n">EmptyDataError</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s1">&#39;coltimes file is empty in: &#39;</span> <span class="o">+</span> <span class="n">folder</span><span class="p">)</span>
+            <span class="k">continue</span>
+
+<span class="c1"># def combine_coltimes_pkls(run_path, *args, **kwargs):</span>
+<span class="c1">#     pkl_glob = os.path.join(run_path, &#39;*&#39;, &#39;coltimes.pkl&#39;)</span>
+<span class="c1">#     for coltimes_pkl in glob.glob(pkl_glob):</span>
+
+<span class="k">def</span> <span class="nf">combine_coltimes_csvs</span><span class="p">(</span><span class="n">run_path</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="n">csv_glob</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">run_path</span><span class="p">,</span> <span class="s1">&#39;*&#39;</span><span class="p">,</span> <span class="s1">&#39;coltimes.csv&#39;</span><span class="p">)</span>
+    <span class="n">csv_files</span> <span class="o">=</span> <span class="nb">iter</span><span class="p">(</span><span class="n">glob</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="n">csv_glob</span><span class="p">))</span>
+    <span class="n">first_file</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">csv_files</span><span class="p">)</span>
+    <span class="n">coltimes</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">first_file</span><span class="p">,</span> <span class="n">index_col</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    <span class="n">coltimes</span><span class="p">[</span><span class="s1">&#39;run_name&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">first_file</span><span class="p">))</span>
+    <span class="n">param_names</span><span class="p">,</span> <span class="n">params</span> <span class="o">=</span> <span class="n">winput</span><span class="o">.</span><span class="n">read_file</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">first_file</span><span class="p">),</span> <span class="s1">&#39;input&#39;</span><span class="p">,</span> <span class="s1">&#39;input&#39;</span><span class="p">))</span>
+    <span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">param_names</span><span class="p">:</span>
+        <span class="n">coltimes</span><span class="p">[</span><span class="n">param</span><span class="p">]</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="n">param</span><span class="p">]</span>
+    <span class="n">coltimes</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">run_path</span><span class="p">,</span> <span class="s1">&#39;coltimes.csv&#39;</span><span class="p">),</span> <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="c1"># now append the remaining</span>
+    <span class="k">for</span> <span class="n">csv_file</span> <span class="ow">in</span> <span class="n">csv_files</span><span class="p">:</span>
+        <span class="n">coltimes</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">csv_file</span><span class="p">,</span> <span class="n">index_col</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">coltimes</span><span class="p">[</span><span class="s1">&#39;run_name&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">csv_file</span><span class="p">))</span>
+        <span class="n">param_names</span><span class="p">,</span> <span class="n">params</span> <span class="o">=</span> <span class="n">winput</span><span class="o">.</span><span class="n">read_file</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+                <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">csv_file</span><span class="p">),</span> <span class="s1">&#39;input&#39;</span><span class="p">,</span> <span class="s1">&#39;input&#39;</span><span class="p">))</span>
+        <span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">param_names</span><span class="p">:</span>
+            <span class="n">coltimes</span><span class="p">[</span><span class="n">param</span><span class="p">]</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="n">param</span><span class="p">]</span>
+        <span class="n">coltimes</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">run_path</span><span class="p">,</span> <span class="s1">&#39;coltimes.csv&#39;</span><span class="p">),</span>
+                                        <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;a&#39;</span><span class="p">,</span> <span class="n">header</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+<div class="viewcode-block" id="add_useful_cols_to_coltimes"><a class="viewcode-back" href="../../wlcsim.html#wlcsim.data.add_useful_cols_to_coltimes">[docs]</a><span class="k">def</span> <span class="nf">add_useful_cols_to_coltimes</span><span class="p">(</span><span class="n">coltimes</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Only works on coltimes that come from combine_coltimes_csvs.&quot;&quot;&quot;</span>
+    <span class="n">coltimes</span><span class="p">[</span><span class="s1">&#39;dr&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">coltimes</span><span class="p">[</span><span class="s1">&#39;L&#39;</span><span class="p">]</span><span class="o">/</span><span class="p">(</span><span class="n">coltimes</span><span class="p">[</span><span class="s1">&#39;N&#39;</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="n">coltimes</span><span class="p">[</span><span class="s1">&#39;linear_distance&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">coltimes</span><span class="p">[</span><span class="s1">&#39;dr&#39;</span><span class="p">]</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">coltimes</span><span class="p">[</span><span class="s1">&#39;i&#39;</span><span class="p">]</span> <span class="o">-</span> <span class="n">coltimes</span><span class="p">[</span><span class="s1">&#39;j&#39;</span><span class="p">])</span></div>
+
+<div class="viewcode-block" id="combine_initial_dists_csvs"><a class="viewcode-back" href="../../wlcsim.html#wlcsim.data.combine_initial_dists_csvs">[docs]</a><span class="k">def</span> <span class="nf">combine_initial_dists_csvs</span><span class="p">(</span><span class="n">run_path</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Not yet implemented.&quot;&quot;&quot;</span>
+    <span class="k">pass</span></div>
+
+<span class="k">def</span> <span class="nf">aggregate_r0_group_NP_L0</span><span class="p">(</span><span class="n">run_path</span><span class="p">,</span> <span class="n">overwrite</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="n">e2e_folder</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">run_path</span><span class="p">,</span> <span class="s1">&#39;data&#39;</span><span class="p">,</span> <span class="s1">&#39;end_to_end_r0&#39;</span><span class="p">)</span>
+    <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">e2e_folder</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="mo">0o755</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">existing_r0_files</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">folder</span> <span class="ow">in</span> <span class="n">glob</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">run_path</span><span class="p">,</span> <span class="s1">&#39;*.*&#39;</span><span class="p">)):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isdir</span><span class="p">(</span><span class="n">folder</span><span class="p">):</span>
+            <span class="k">continue</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">sim</span> <span class="o">=</span> <span class="n">Sim</span><span class="p">(</span><span class="n">folder</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">FileNotFoundError</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s1">&#39;aggregate_r0_group_NP_L0: Unable to construct sim from &#39;</span> <span class="o">+</span> <span class="n">folder</span><span class="p">)</span>
+            <span class="k">continue</span>
+        <span class="c1"># #beads</span>
+        <span class="n">N</span> <span class="o">=</span> <span class="n">sim</span><span class="o">.</span><span class="n">params</span><span class="p">[</span><span class="s1">&#39;N&#39;</span><span class="p">]</span>
+        <span class="c1"># length in units of simulation</span>
+        <span class="n">L</span> <span class="o">=</span> <span class="n">sim</span><span class="o">.</span><span class="n">params</span><span class="p">[</span><span class="s1">&#39;L&#39;</span><span class="p">]</span>
+        <span class="n">r0_agg_file</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">e2e_folder</span><span class="p">,</span> <span class="s1">&#39;r0_&#39;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">N</span><span class="p">)</span> <span class="o">+</span> <span class="s1">&#39;_&#39;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">L</span><span class="p">)</span> <span class="o">+</span> <span class="s1">&#39;.csv&#39;</span><span class="p">)</span>
+        <span class="n">r0_file</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">folder</span><span class="p">,</span> <span class="s1">&#39;data&#39;</span><span class="p">,</span> <span class="s1">&#39;r0&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isfile</span><span class="p">(</span><span class="n">r0_agg_file</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">overwrite</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="k">if</span> <span class="n">r0_agg_file</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">existing_r0_files</span><span class="p">:</span>
+            <span class="n">existing_r0_files</span><span class="p">[</span><span class="n">r0_agg_file</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">shutil</span><span class="o">.</span><span class="n">copyfile</span><span class="p">(</span><span class="n">r0_file</span><span class="p">,</span> <span class="n">r0_agg_file</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">OSError</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s1">&#39;r0 not found for: &#39;</span> <span class="o">+</span> <span class="n">folder</span><span class="p">)</span>
+                <span class="nb">open</span><span class="p">(</span><span class="n">r0_agg_file</span><span class="p">,</span> <span class="s1">&#39;a&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">close</span><span class="p">()</span> <span class="c1"># make sure file exists later in loop</span>
+            <span class="k">continue</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">r0_in</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="n">r0_file</span><span class="p">,</span> <span class="s1">&#39;r&#39;</span><span class="p">)</span>
+            <span class="k">except</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s1">&#39;r0 not found for: &#39;</span> <span class="o">+</span> <span class="n">folder</span><span class="p">)</span>
+                <span class="k">continue</span>
+            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">r0_agg_file</span><span class="p">,</span> <span class="s1">&#39;a&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">r0_out</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">r0_in</span><span class="p">:</span>
+                    <span class="n">r0_out</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">line</span><span class="p">)</span>
+            <span class="n">r0_in</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+<div class="viewcode-block" id="insert_simulations"><a class="viewcode-back" href="../../wlcsim.html#wlcsim.data.insert_simulations">[docs]</a><span class="k">def</span> <span class="nf">insert_simulations</span><span class="p">(</span><span class="n">run_path</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;x&#39;</span><span class="p">,</span> <span class="n">file_name</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    insert_simulations(run_path, mode=&#39;x&#39;, file_name=run_path/../&#39;all_simulations.csv&#39;)</span>
+<span class="sd">    makes each run that was done in a particular run</span>
+<span class="sd">    directory into a row in a pandas DataFrame holding all of the parameters of</span>
+<span class="sd">    that run.</span>
+<span class="sd">    mode=None triggers that DataFrame to be returned, and no file read or</span>
+<span class="sd">    written.</span>
+<span class="sd">    mode=&#39;r&#39; triggers file_name to be read and the contents appended to the</span>
+<span class="sd">    generated DataFrame before it&#39;s returned.</span>
+<span class="sd">    mode=&#39;w&#39; triggers the new DataFrame to overwrite the file file_name in</span>
+<span class="sd">    run_path/..</span>
+<span class="sd">    mode=&#39;a&#39; triggers the new DataFrame to be appended to the file file_name in</span>
+<span class="sd">    run_path/..</span>
+
+<span class="sd">    Only mode=&#39;a&#39; is implemented for now, as that&#39;s the only one I need for my</span>
+<span class="sd">    meeting with Andy tomorrow.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">file_name</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">file_name</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">run_path</span><span class="p">,</span> <span class="s1">&#39;..&#39;</span><span class="p">,</span> <span class="n">default_sims_csv</span><span class="p">)</span>
+    <span class="n">scan</span> <span class="o">=</span> <span class="n">Scan</span><span class="p">(</span><span class="n">run_path</span><span class="p">)</span>
+    <span class="n">sim_info</span> <span class="o">=</span> <span class="n">scan</span><span class="o">.</span><span class="n">inputs</span>
+    <span class="n">add_useful_cols_to_sim_info</span><span class="p">(</span><span class="n">sim_info</span><span class="p">,</span> <span class="n">run_path</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">mode</span> <span class="o">!=</span> <span class="s1">&#39;a&#39;</span><span class="p">:</span>
+        <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s1">&#39;mode must be a for now&#39;</span><span class="p">)</span>
+    <span class="c1"># I was under the delusion that I wouldn&#39;t have to load the existing array</span>
+    <span class="c1"># into memory, but then we don&#39;t know whether or not we are inserting</span>
+    <span class="c1"># repeats</span>
+    <span class="c1"># if os.path.isfile(file_name):</span>
+    <span class="c1">#     dummy_row = pd.read_csv(file_name, nrows=1, index_col=0)</span>
+    <span class="c1">#     dummy_index = dummy_row.iloc[0].name</span>
+    <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isfile</span><span class="p">(</span><span class="n">file_name</span><span class="p">):</span>
+        <span class="c1"># append to the existing table to force missing columns to be</span>
+        <span class="c1"># generated correctly</span>
+        <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">file_name</span><span class="p">,</span> <span class="n">index_col</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span></div>
+
+
+    
+<div class="viewcode-block" id="add_useful_cols_to_sim_info"><a class="viewcode-back" href="../../wlcsim.html#wlcsim.data.add_useful_cols_to_sim_info">[docs]</a><span class="k">def</span> <span class="nf">add_useful_cols_to_sim_info</span><span class="p">(</span><span class="n">sim_info</span><span class="p">,</span> <span class="n">run_path</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Centralized place to call functions that add columns to the DataFrame</span>
+<span class="sd">    holding information about each simulation that has been run.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="s1">&#39;finished_colliding&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">sim_info</span><span class="p">:</span>
+        <span class="n">sim_info</span><span class="p">[</span><span class="s1">&#39;finished_colliding&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="c1">#        for sim</span>
+    <span class="k">pass</span></div>
+
+
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <div><input type="text" name="q" /></div>
+      <div><input type="submit" value="Go" /></div>
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../index.html">wlcsim 0.1 documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../index.html" >Module code</a> &#187;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2016, Andrew Spakowitz, Bruno Beltran, Sarah Sandholtz, Quinn MacPherson, Shifan Mao, Elena Koslover.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.4.6.
+    </div>
+  </body>
+</html>

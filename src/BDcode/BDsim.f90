@@ -2,7 +2,7 @@
 
       SUBROUTINE BDsim(R,U,NT,N,NP,TIME,TTOT,DT,BROWN, &
            INTON,IDUM,PARA,SIMTYPE,HAS_COLLIDED,FPT_DIST, &
-           COL_TYPE)
+           COL_TYPE, CONFINEMENT, CONFP1, CONFP2)
 
 !
 !     External subroutine to perform a Brownian dynamics simulation.
@@ -242,6 +242,9 @@
 !     Step forward using the RK algorithm
 
             call RKstep(RS,R,US,U,DRDT,DUDT,NT,N,NP,RK,DT)
+
+!     Rebound if particle has exited the confinment geometry
+            call rebound_if_collided(RS, R, US, U, NT, N, NP)
 
             RK=RK+1
 

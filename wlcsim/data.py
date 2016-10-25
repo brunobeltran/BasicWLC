@@ -8,6 +8,7 @@ import glob
 import re
 from . import input as winput
 from .utils.cached_property import cached_property
+from .utils.path import path_parts
 import shutil
 
 from numba import double
@@ -20,6 +21,9 @@ logger = logging.getLogger(__name__)
 i_arr = np.array([[1]])
 j_arr = np.array([[1]])
 ui = (np.array([0]), np.array([0]))
+
+# default filenames
+default_sims_csv = 'all_simulations.csv'
 
 @autojit
 def pairwise_distances3(r):
@@ -137,11 +141,14 @@ class Sim:
         self.load_method = load_method
 
     @cached_property
+    def _coltimes(self):
+        """Keep the original matrix around for convenience."""
+        return pd.read_csv(self.coltimes_file, delim_whitespace=True,
+                           header=None).values
+
+    @cached_property
     def coltimes(self):
-        coltimes = pd.read_csv(self.coltimes_file, delim_whitespace=True,
-                                header=None).values
-        coltimes = self.df_from_coltimes(coltimes, method=self.load_method)
-        return coltimes
+        return Sim.df_from_coltimes(self._coltimes, method=self.load_method)
 
     @cached_property
     def r0(self):
@@ -212,7 +219,12 @@ class Sim:
     def utimes(self):
         return self.utime_idxs * self.params['DT']
 
-    def df_from_coltimes(self, coltimes, method=3):
+    @staticmethod
+    def df_from_coltimes(coltimes, method=3):
+        """
+        Make a DataFrame with the two colliding beads' indices in the polymer
+        and the first collision time between them as columns.
+        """
         # coltimes_file = os.path.join(self.data_dir, 'coltimes.csv')
         # if os.path.isfile(coltimes_file) and not self.overwrite_coltimes:
         #     coltimes = pd.read_csv(coltimes_file, index_col=0)
@@ -227,15 +239,17 @@ class Sim:
         else:
             raise KeyError('load_method=' + str(method) + ' does not exist!')
         nan_fill_coltimes(coltimes)
-        self.add_useful_cols_to_coltimes(coltimes)
+        add_useful_cols_to_coltimes(self.coltimes)
         # coltimes.to_csv(coltimes_file)
         return coltimes
 
+    def did_fill_coltimes(self):
+        """True if the simulation ran long enough that every bead collided with
+        every other bead. Otherwise False."""
+        num_beads = len(self.coltimes)
+        num_possible_collisions = num_beads*num_beads - num_beads
+        return np.sum(np.isnan(self._coltimes)) == num_possible_collisions
 
-    def add_useful_cols_to_coltimes(self, coltimes):
-        """Only works on coltimes that come from combine_coltimes_csvs."""
-        dr = self.params['L']/(self.params['N'] - 1)
-        coltimes['linear_distance'] = dr*np.abs(coltimes['i'] - coltimes['j'])
 
 
 def nan_fill_coltimes(coltimes):
@@ -250,13 +264,15 @@ class Scan:
     """Can tell you what dirs in a run_dir are simulation directories, and what
     all the input files said, and more. """
 
-    def __init__(self, run_dir, *args, **kwargs):
-        is_sim = lambda d: Scan.is_simdir(d, run_dir)
-        self.sim_dirs = list(filter(is_sim, os.listdir(run_dir)))
-        prepend_path = lambda d: os.path.join(run_dir, d)
+    def __init__(self, run_path, *args, **kwargs):
+        self.run_path = run_path
+        self.run_dir = os.path.basename(run_path)
+        is_sim = lambda d: Scan.is_simdir(d, run_path)
+        self.sim_dirs = list(filter(is_sim, os.listdir(run_path)))
+        prepend_path = lambda d: os.path.join(run_path, d)
         self.sim_paths = list(map(prepend_path, self.sim_dirs))
         # self.wlcsim_data = [Sim(folder, *args, **kwargs) for folder in
-        #                     glob.glob(os.path.join(run_dir, '*.*'))
+        #                     glob.glob(os.path.join(run_path, '*.*'))
         #                     if os.path.isdir(folder)]
         # self.param_names = self.wlcsim_data[0].param_names
         # for sim in self.wlcsim_data:
@@ -268,9 +284,9 @@ class Scan:
         # self.calculate_linear_distance()
 
     @staticmethod
-    def is_simdir(dirname, run_dir):
+    def is_simdir(dirname, run_path):
         sim_name_re = re.compile('.*\.[0-9]+')
-        abs_dirname = os.path.join(run_dir, dirname)
+        abs_dirname = os.path.join(run_path, dirname)
         input_file = os.path.join(abs_dirname, 'input', 'input')
         return sim_name_re.search(dirname) \
                 and os.path.isdir(abs_dirname) \
@@ -283,7 +299,11 @@ class Scan:
     @cached_property
     def inputs(self):
         df = pd.DataFrame([sim.params for sim in self.sims])
-        df.index = [sim.sim_dir for sim in self.sims]
+        # in Bruno's simulation-saving scheme, this is a unique identifier of a
+        # particular run of wlcsim. not os.path.join in case someone uses
+        # windows. this will still be unique since they prohibit '/' in
+        # filenames
+        df.index = [self.run_dir + '/' + sim.sim_dir for sim in self.sims]
         return df
 
     @cached_property
@@ -300,8 +320,8 @@ class Scan:
         # """unimplemented"""
         # pass
 
-def write_coltimes_csvs(run_dir, overwrite=False, *args, **kwargs):
-    for folder in glob.glob(os.path.join(run_dir, '*.*')):
+def write_coltimes_csvs(run_path, overwrite=False, *args, **kwargs):
+    for folder in glob.glob(os.path.join(run_path, '*.*')):
         if not os.path.isdir(folder):
             continue
         coltimes_file = os.path.join(folder, 'coltimes.csv')
@@ -321,8 +341,8 @@ def write_coltimes_csvs(run_dir, overwrite=False, *args, **kwargs):
             logger.warning('coltimes file is empty in: ' + folder)
             continue
 
-def write_initial_dists_csvs(run_dir, overwrite=True, *args, **kwargs):
-    for folder in glob.glob(os.path.join(run_dir, '*.*')):
+def write_initial_dists_csvs(run_path, overwrite=True, *args, **kwargs):
+    for folder in glob.glob(os.path.join(run_path, '*.*')):
         if not os.path.isdir(folder):
             continue
         dists_file = os.path.join(folder, 'initial_dists.csv')
@@ -342,8 +362,8 @@ def write_initial_dists_csvs(run_dir, overwrite=True, *args, **kwargs):
             logger.warning('r0 file is empty in: ' + folder)
             continue
 
-def write_coltimes_pkls(run_dir, *args, **kwargs):
-    for folder in glob.glob(os.path.join(run_dir, '*.*')):
+def write_coltimes_pkls(run_path, *args, **kwargs):
+    for folder in glob.glob(os.path.join(run_path, '*.*')):
         if not os.path.isdir(folder):
             continue
         try:
@@ -359,12 +379,12 @@ def write_coltimes_pkls(run_dir, *args, **kwargs):
             logger.warning('coltimes file is empty in: ' + folder)
             continue
 
-# def combine_coltimes_pkls(run_dir, *args, **kwargs):
-#     pkl_glob = os.path.join(run_dir, '*', 'coltimes.pkl')
+# def combine_coltimes_pkls(run_path, *args, **kwargs):
+#     pkl_glob = os.path.join(run_path, '*', 'coltimes.pkl')
 #     for coltimes_pkl in glob.glob(pkl_glob):
 
-def combine_coltimes_csvs(run_dir, *args, **kwargs):
-    csv_glob = os.path.join(run_dir, '*', 'coltimes.csv')
+def combine_coltimes_csvs(run_path, *args, **kwargs):
+    csv_glob = os.path.join(run_path, '*', 'coltimes.csv')
     csv_files = iter(glob.glob(csv_glob))
     first_file = next(csv_files)
     coltimes = pd.read_csv(first_file, index_col=0)
@@ -372,7 +392,7 @@ def combine_coltimes_csvs(run_dir, *args, **kwargs):
     param_names, params = winput.read_file(os.path.join(os.path.dirname(first_file), 'input', 'input'))
     for param in param_names:
         coltimes[param] = params[param]
-    coltimes.to_csv(os.path.join(run_dir, 'coltimes.csv'), index=False)
+    coltimes.to_csv(os.path.join(run_path, 'coltimes.csv'), index=False)
     # now append the remaining
     for csv_file in csv_files:
         coltimes = pd.read_csv(csv_file, index_col=0)
@@ -381,7 +401,7 @@ def combine_coltimes_csvs(run_dir, *args, **kwargs):
                 os.path.dirname(csv_file), 'input', 'input'))
         for param in param_names:
             coltimes[param] = params[param]
-        coltimes.to_csv(os.path.join(run_dir, 'coltimes.csv'),
+        coltimes.to_csv(os.path.join(run_path, 'coltimes.csv'),
                                         index=False, mode='a', header=False)
 
 def add_useful_cols_to_coltimes(coltimes):
@@ -389,15 +409,15 @@ def add_useful_cols_to_coltimes(coltimes):
     coltimes['dr'] = coltimes['L']/(coltimes['N'] - 1)
     coltimes['linear_distance'] = coltimes['dr']*np.abs(coltimes['i'] - coltimes['j'])
 
-def combine_initial_dists_csvs(run_dir, *args, **kwargs):
+def combine_initial_dists_csvs(run_path, *args, **kwargs):
     """Not yet implemented."""
     pass
 
-def aggregate_r0_group_NP_L0(run_dir, overwrite=True, *args, **kwargs):
-    e2e_folder = os.path.join(run_dir, 'data', 'end_to_end_r0')
+def aggregate_r0_group_NP_L0(run_path, overwrite=True, *args, **kwargs):
+    e2e_folder = os.path.join(run_path, 'data', 'end_to_end_r0')
     os.makedirs(e2e_folder, mode=0o755, exist_ok=True)
     existing_r0_files = {}
-    for folder in glob.glob(os.path.join(run_dir, '*.*')):
+    for folder in glob.glob(os.path.join(run_path, '*.*')):
         if not os.path.isdir(folder):
             continue
         try:
@@ -431,3 +451,51 @@ def aggregate_r0_group_NP_L0(run_dir, overwrite=True, *args, **kwargs):
                 for line in r0_in:
                     r0_out.write(line)
             r0_in.close()
+
+def insert_simulations(run_path, mode='x', file_name=None):
+    """
+    insert_simulations(run_path, mode='x', file_name=run_path/../'all_simulations.csv')
+    makes each run that was done in a particular run
+    directory into a row in a pandas DataFrame holding all of the parameters of
+    that run.
+    mode=None triggers that DataFrame to be returned, and no file read or
+    written.
+    mode='r' triggers file_name to be read and the contents appended to the
+    generated DataFrame before it's returned.
+    mode='w' triggers the new DataFrame to overwrite the file file_name in
+    run_path/..
+    mode='a' triggers the new DataFrame to be appended to the file file_name in
+    run_path/..
+
+    Only mode='a' is implemented for now, as that's the only one I need for my
+    meeting with Andy tomorrow.
+    """
+    if file_name is None:
+        file_name = os.path.join(run_path, '..', default_sims_csv)
+    scan = Scan(run_path)
+    sim_info = scan.inputs
+    add_useful_cols_to_sim_info(sim_info, run_path)
+    if mode != 'a':
+        NotImplementedError('mode must be a for now')
+    # I was under the delusion that I wouldn't have to load the existing array
+    # into memory, but then we don't know whether or not we are inserting
+    # repeats
+    # if os.path.isfile(file_name):
+    #     dummy_row = pd.read_csv(file_name, nrows=1, index_col=0)
+    #     dummy_index = dummy_row.iloc[0].name
+    if os.path.isfile(file_name):
+        # append to the existing table to force missing columns to be
+        # generated correctly
+        pd.read_csv(file_name, index_col=0)
+
+
+    
+def add_useful_cols_to_sim_info(sim_info, run_path):
+    """Centralized place to call functions that add columns to the DataFrame
+    holding information about each simulation that has been run."""
+    if 'finished_colliding' not in sim_info:
+        sim_info['finished_colliding'] = False
+#        for sim
+    pass
+
+

@@ -1,0 +1,279 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>wlcsim Python Module &#8212; wlcsim 0.1 documentation</title>
+    
+    <link rel="stylesheet" href="_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '0.1',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="wlcsim 0.1 documentation" href="index.html" />
+    <link rel="prev" title="Analyzing Simulation Output" href="analyzing.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="analyzing.html" title="Analyzing Simulation Output"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">wlcsim 0.1 documentation</a> &#187;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="module-wlcsim">
+<span id="wlcsim-python-module"></span><h1>wlcsim Python Module<a class="headerlink" href="#module-wlcsim" title="Permalink to this headline">¶</a></h1>
+<p>WLCSIM: A Python interface to the Spakowitz lab&#8217;s Worm Like Chain SIMulator</p>
+<div class="section" id="module-wlcsim.data">
+<span id="wlcsim-data"></span><h2>wlcsim.data<a class="headerlink" href="#module-wlcsim.data" title="Permalink to this headline">¶</a></h2>
+<p>This module &#8220;understands&#8221; wlcsim.exe&#8217;s output, and will make it into
+nice, pretty numpy/pandas arrays for you.</p>
+<dl class="class">
+<dt id="wlcsim.data.Scan">
+<em class="property">class </em><code class="descclassname">wlcsim.data.</code><code class="descname">Scan</code><span class="sig-paren">(</span><em>run_path</em>, <em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/wlcsim/data.html#Scan"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#wlcsim.data.Scan" title="Permalink to this definition">¶</a></dt>
+<dd><p>Can tell you what dirs in a run_dir are simulation directories, and what
+all the input files said, and more.</p>
+</dd></dl>
+
+<dl class="class">
+<dt id="wlcsim.data.Sim">
+<em class="property">class </em><code class="descclassname">wlcsim.data.</code><code class="descname">Sim</code><span class="sig-paren">(</span><em>sim_path</em>, <em>overwrite_coltimes=False</em>, <em>load_method=3</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/wlcsim/data.html#Sim"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#wlcsim.data.Sim" title="Permalink to this definition">¶</a></dt>
+<dd><p>Sim provides an interface to the heterogenous data produced by a
+simulation that saves coltimes, positions, and momentums.</p>
+<p>Unless specified during initialization, the coltimes, r, and u are loaded
+on demand upon first access.</p>
+<p>Accessing properties of this class for the first time can return an IOError
+if a file is moved, or doesn&#8217;t exist. Afterwards, the values will be cached.</p>
+<dl class="attribute">
+<dt id="wlcsim.data.Sim._coltimes">
+<code class="descname">_coltimes</code><a class="reference internal" href="_modules/wlcsim/data.html#Sim._coltimes"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#wlcsim.data.Sim._coltimes" title="Permalink to this definition">¶</a></dt>
+<dd><p>Keep the original matrix around for convenience.</p>
+</dd></dl>
+
+<dl class="staticmethod">
+<dt id="wlcsim.data.Sim.df_from_coltimes">
+<em class="property">static </em><code class="descname">df_from_coltimes</code><span class="sig-paren">(</span><em>coltimes</em>, <em>method=3</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/wlcsim/data.html#Sim.df_from_coltimes"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#wlcsim.data.Sim.df_from_coltimes" title="Permalink to this definition">¶</a></dt>
+<dd><p>Make a DataFrame with the two colliding beads&#8217; indices in the polymer
+and the first collision time between them as columns.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="wlcsim.data.Sim.did_fill_coltimes">
+<code class="descname">did_fill_coltimes</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/wlcsim/data.html#Sim.did_fill_coltimes"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#wlcsim.data.Sim.did_fill_coltimes" title="Permalink to this definition">¶</a></dt>
+<dd><p>True if the simulation ran long enough that every bead collided with
+every other bead. Otherwise False.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="wlcsim.data.Sim.r">
+<code class="descname">r</code><a class="reference internal" href="_modules/wlcsim/data.html#Sim.r"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#wlcsim.data.Sim.r" title="Permalink to this definition">¶</a></dt>
+<dd><p>Numpy array of positions of each particle at each time point.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="wlcsim.data.Sim.r0">
+<code class="descname">r0</code><a class="reference internal" href="_modules/wlcsim/data.html#Sim.r0"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#wlcsim.data.Sim.r0" title="Permalink to this definition">¶</a></dt>
+<dd><p>Numpy array of positions of each particle at each time point.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="wlcsim.data.Sim.u">
+<code class="descname">u</code><a class="reference internal" href="_modules/wlcsim/data.html#Sim.u"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#wlcsim.data.Sim.u" title="Permalink to this definition">¶</a></dt>
+<dd><p>Numpy array of positions of each particle at each time point.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="wlcsim.data.Sim.u0">
+<code class="descname">u0</code><a class="reference internal" href="_modules/wlcsim/data.html#Sim.u0"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#wlcsim.data.Sim.u0" title="Permalink to this definition">¶</a></dt>
+<dd><p>Numpy array of positions of each particle at each time point.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="function">
+<dt id="wlcsim.data.add_useful_cols_to_coltimes">
+<code class="descclassname">wlcsim.data.</code><code class="descname">add_useful_cols_to_coltimes</code><span class="sig-paren">(</span><em>coltimes</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/wlcsim/data.html#add_useful_cols_to_coltimes"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#wlcsim.data.add_useful_cols_to_coltimes" title="Permalink to this definition">¶</a></dt>
+<dd><p>Only works on coltimes that come from combine_coltimes_csvs.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="wlcsim.data.add_useful_cols_to_sim_info">
+<code class="descclassname">wlcsim.data.</code><code class="descname">add_useful_cols_to_sim_info</code><span class="sig-paren">(</span><em>sim_info</em>, <em>run_path</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/wlcsim/data.html#add_useful_cols_to_sim_info"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#wlcsim.data.add_useful_cols_to_sim_info" title="Permalink to this definition">¶</a></dt>
+<dd><p>Centralized place to call functions that add columns to the DataFrame
+holding information about each simulation that has been run.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="wlcsim.data.combine_initial_dists_csvs">
+<code class="descclassname">wlcsim.data.</code><code class="descname">combine_initial_dists_csvs</code><span class="sig-paren">(</span><em>run_path</em>, <em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/wlcsim/data.html#combine_initial_dists_csvs"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#wlcsim.data.combine_initial_dists_csvs" title="Permalink to this definition">¶</a></dt>
+<dd><p>Not yet implemented.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="wlcsim.data.insert_simulations">
+<code class="descclassname">wlcsim.data.</code><code class="descname">insert_simulations</code><span class="sig-paren">(</span><em>run_path</em>, <em>mode='x'</em>, <em>file_name=run_path/../'all_simulations.csv'</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/wlcsim/data.html#insert_simulations"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#wlcsim.data.insert_simulations" title="Permalink to this definition">¶</a></dt>
+<dd><p>makes each run that was done in a particular run
+directory into a row in a pandas DataFrame holding all of the parameters of
+that run.
+mode=None triggers that DataFrame to be returned, and no file read or
+written.
+mode=&#8217;r&#8217; triggers file_name to be read and the contents appended to the
+generated DataFrame before it&#8217;s returned.
+mode=&#8217;w&#8217; triggers the new DataFrame to overwrite the file file_name in
+run_path/..
+mode=&#8217;a&#8217; triggers the new DataFrame to be appended to the file file_name in
+run_path/..</p>
+<p>Only mode=&#8217;a&#8217; is implemented for now, as that&#8217;s the only one I need for my
+meeting with Andy tomorrow.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="wlcsim.data.nan_fill_coltimes">
+<code class="descclassname">wlcsim.data.</code><code class="descname">nan_fill_coltimes</code><span class="sig-paren">(</span><em>coltimes</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/wlcsim/data.html#nan_fill_coltimes"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#wlcsim.data.nan_fill_coltimes" title="Permalink to this definition">¶</a></dt>
+<dd><p>Takes a raw coltimes pandas array from e.g. write_coltimes_csvs and puts
+nan&#8217;s where the -1.0&#8217;s are, i.e. where the simulation did not go out far
+enough.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="wlcsim.data.pairwise_distances3">
+<code class="descclassname">wlcsim.data.</code><code class="descname">pairwise_distances3</code><a class="reference internal" href="_modules/wlcsim/data.html#pairwise_distances3"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#wlcsim.data.pairwise_distances3" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns np.array of pairwise distances of points in R^3 stored in a
+3-by-num_points numpy array.</p>
+</dd></dl>
+
+</div>
+<div class="section" id="module-wlcsim.input">
+<span id="wlcsim-input"></span><h2>wlcsim.input<a class="headerlink" href="#module-wlcsim.input" title="Permalink to this headline">¶</a></h2>
+<p>This module &#8220;understands&#8221; the input format of wlcsim.exe</p>
+<dl class="function">
+<dt id="wlcsim.input.read_file">
+<code class="descclassname">wlcsim.input.</code><code class="descname">read_file</code><span class="sig-paren">(</span><em>input_file</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/wlcsim/input.html#read_file"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#wlcsim.input.read_file" title="Permalink to this definition">¶</a></dt>
+<dd><p>returns a list: ordered_param_names, and a dict: simulation_params</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="wlcsim.input.write_file">
+<code class="descclassname">wlcsim.input.</code><code class="descname">write_file</code><span class="sig-paren">(</span><em>input_file</em>, <em>ordered_param_names</em>, <em>params</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/wlcsim/input.html#write_file"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#wlcsim.input.write_file" title="Permalink to this definition">¶</a></dt>
+<dd><p>writes out a valid input file for wlcsim.exe given parameters
+in the format returned by read_file</p>
+</dd></dl>
+
+</div>
+<div class="section" id="module-wlcsim.analyze">
+<span id="wlcsim-analyze"></span><h2>wlcsim.analyze<a class="headerlink" href="#module-wlcsim.analyze" title="Permalink to this headline">¶</a></h2>
+<p>Currently, dumping place for all analysis routines.</p>
+<dl class="class">
+<dt id="wlcsim.analyze.MapMeanColtimes">
+<em class="property">class </em><code class="descclassname">wlcsim.analyze.</code><code class="descname">MapMeanColtimes</code><span class="sig-paren">(</span><em>group_params</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/wlcsim/analyze.html#MapMeanColtimes"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#wlcsim.analyze.MapMeanColtimes" title="Permalink to this definition">¶</a></dt>
+<dd><p>Function object, allows the same-named method to be passed to
+Pool.map</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="wlcsim.analyze.map_cdf_coltimes">
+<code class="descclassname">wlcsim.analyze.</code><code class="descname">map_cdf_coltimes</code><span class="sig-paren">(</span><em>sim_dir, dt, group_params=['linear_distance']</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/wlcsim/analyze.html#map_cdf_coltimes"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#wlcsim.analyze.map_cdf_coltimes" title="Permalink to this definition">¶</a></dt>
+<dd><p>TODO: actually implement</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="wlcsim.analyze.striding_map_mean_coltimes">
+<code class="descclassname">wlcsim.analyze.</code><code class="descname">striding_map_mean_coltimes</code><span class="sig-paren">(</span><em>sim_dir, idx_gap=0, group_params=['linear_distance']</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/wlcsim/analyze.html#striding_map_mean_coltimes"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#wlcsim.analyze.striding_map_mean_coltimes" title="Permalink to this definition">¶</a></dt>
+<dd><p>Not yet implemented. In the future, this should calculate the mean
+for a particular simulation of all the beads of each separation possible,
+without overlapping looped sections. Gah. Don&#8217;t feel like typing that
+better.</p>
+</dd></dl>
+
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">wlcsim Python Module</a><ul>
+<li><a class="reference internal" href="#module-wlcsim.data">wlcsim.data</a></li>
+<li><a class="reference internal" href="#module-wlcsim.input">wlcsim.input</a></li>
+<li><a class="reference internal" href="#module-wlcsim.analyze">wlcsim.analyze</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="analyzing.html"
+                        title="previous chapter">Analyzing Simulation Output</a></p>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/wlcsim.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <div><input type="text" name="q" /></div>
+      <div><input type="submit" value="Go" /></div>
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="analyzing.html" title="Analyzing Simulation Output"
+             >previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">wlcsim 0.1 documentation</a> &#187;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2016, Andrew Spakowitz, Bruno Beltran, Sarah Sandholtz, Quinn MacPherson, Shifan Mao, Elena Koslover.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.4.6.
+    </div>
+  </body>
+</html>

@@ -81,12 +81,20 @@
       DOUBLE PRECISION MOM(6)
 
 !     Variable to hold time of first collisions between each bead
+
       DOUBLE PRECISION, ALLOCATABLE, DIMENSION(:,:):: HAS_COLLIDED
       INTEGER NUM_POSSIBLE_COLLISIONS
       DOUBLE PRECISION FPT_DIST ! l1 dist to trigger collision
       INTEGER COL_TYPE ! what kind of collision checking to use
 
+!     Variables to control the geometric structure of confinment, if any
+
+      INTEGER CONFINEMENT       ! what type of confiment, if any
+      DOUBLE PRECISION CONFP1   ! parameter defining confinement
+      DOUBLE PRECISION CONFP2   ! parameter defining confinement
+
 !     Variables to control simulation output
+
       INTEGER SAVE_RU
       INTEGER EXIT_WHEN_COLLIDED
 
@@ -123,6 +131,12 @@
       read (unit=5, fmt=*) SAVE_RU
       read (unit=5, fmt='(2(/))')
       read (unit=5, fmt=*) EXIT_WHEN_COLLIDED
+      read (unit=5, fmt='(2(/))')
+      read (unit=5, fmt=*) CONFINEMENT
+      read (unit=5, fmt='(2(/))')
+      read (unit=5, fmt=*) CONFP1
+      read (unit=5, fmt='(2(/))')
+      read (unit=5, fmt=*) CONFP2
       close(5)
       NUM_POSSIBLE_COLLISIONS = N*N - N
       call getpara(PARA,DT,SIMTYPE)
@@ -148,7 +162,7 @@
 
       call initcond(R,U,NT,N,NP,IDUM,FRMFILE,PARA)
 
-!     Turn on moves for each simulation type
+!     Turn on Monte Carlo moves for each simulation type
 
       if (SIMTYPE.EQ.1) then
          MCAMP(1)=1.
@@ -198,7 +212,7 @@
 !     Perform an initialization MC simulation
 
       call MCsim(R,U,NT,N,NP,NINIT,BROWN,INTON,IDUM,PARA,MCAMP, &
-           SUCCESS,MOVEON,WINDOW,SIMTYPE)
+           SUCCESS,MOVEON,WINDOW,SIMTYPE,CONFINEMENT,CONFP1,CONFP2)
 
 !     Save the conformation and PSI angles
 
@@ -246,10 +260,10 @@
 
       DO WHILE (IND.LE.INDMAX)
 
-!     Perform a MC simulation, only if NSTEP.NE.0
+!     Perform a MC simulation
 
          call MCsim(R,U,NT,N,NP,NSTEP,BROWN,INTON,IDUM,PARA,MCAMP, &
-              SUCCESS,MOVEON,WINDOW,SIMTYPE)
+              SUCCESS,MOVEON,WINDOW,SIMTYPE,CONFINEMENT,CONFP1,CONFP2)
 
 !     Perform a Brownian dynamics simulation over time step
 
@@ -260,7 +274,8 @@
          endif
          if (NSTEP.EQ.0) then
             call BDsim(R,U,NT,N,NP,TIME,TSAVE,DT,BROWN,INTON,IDUM, &
-                       PARA,SIMTYPE,HAS_COLLIDED,FPT_DIST,COL_TYPE)
+                       PARA,SIMTYPE,HAS_COLLIDED,FPT_DIST,COL_TYPE, &
+                       CONFINEMENT,CONFP1,CONFP2)
          endif
 
 !     Save the conformation and the metrics

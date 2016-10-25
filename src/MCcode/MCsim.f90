@@ -4,7 +4,8 @@
 !     polymer chain.
 
       SUBROUTINE MCsim(R,U,NT,N,NP,NSTEP,BROWN, &
-           INTON,IDUM,PARA,MCAMP,SUCCESS,MOVEON,WINDOW,SIMTYPE)
+           INTON,IDUM,PARA,MCAMP,SUCCESS,MOVEON,WINDOW,SIMTYPE, &
+           CONFINEMENT, CONFP1, CONFP2)
 
       use mt19937, only : grnd
 
@@ -18,6 +19,9 @@
       INTEGER NSTEP             ! Number of MC steps
       INTEGER BROWN            ! Turn on fluctuations
       INTEGER INTON             ! Include polymer interactions
+      INTEGER CONFINEMENT       ! what type of confiment, if any
+      DOUBLE PRECISION CONFP1   ! parameter defining confinement
+      DOUBLE PRECISION CONFP2   ! parameter defining confinement
 
 !     Variables for the simulation
 
@@ -70,6 +74,8 @@
       DOUBLE PRECISION VHC      ! HC strength
       DOUBLE PRECISION PARA(10)
       DOUBLE PRECISION FCOM
+
+      INTEGER is_inside ! if the current MC step went outside of confinement
 
 !     Load the input parameters
 
@@ -193,7 +199,12 @@
             else
                TEST=1.
             endif
-            if (TEST.LE.PROB) then
+            if (CONFINEMENT.NE.0) then
+                is_inside = check_if_inside(RP, NT, CONFINEMENT, CONFP1, CONFP2)
+            else
+                is_inside = 1
+            endif
+            if (TEST.LE.PROB .AND. is_inside.EQ.1) then
                DO 20 I=IT1,IT2
                   R(I,1)=RP(I,1)
                   R(I,2)=RP(I,2)

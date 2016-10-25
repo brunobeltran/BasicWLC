@@ -1,0 +1,6 @@
+Traceback (most recent call last):
+  File "./scan_wlcsim.py", line 2, in <module>
+    import pscan
+  File "/home/users/bbeltr1/developer/BasicWLC/pscan.py", line 9, in <module>
+    import numpy as np # just for unravel_index
+ImportError: No module named 'numpy'
