@@ -83,6 +83,11 @@ program main
            print *, 'i is', i
            print *, '*******************'
         enddo
+    case ('sarah', 'gillespie with brownian dynamics')
+        do i=1,wlc_p%numSavePoints
+            call wlcsim_sarah(i, wlc_d, wlc_p)
+            call save_simulation_state(i, wlc_d, wlc_p, outfile)
+        enddo
     case ('bruno', 'brownian dynamics')
         do i=1,wlc_p%numSavePoints
             call wlcsim_bruno(i, wlc_d, wlc_p)

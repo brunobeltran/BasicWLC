@@ -14,20 +14,21 @@ subroutine insertion_sort(n,a)
 30  continue
 end
 
-subroutine check_collisions(r, nt, has_collided, fpt_dist, time, col_type)
+subroutine check_collisions(r, nt, has_collided, fpt_dist, time, col_type, in_rxn_rad)
     implicit none
     integer, intent(in) :: nt, col_type
     double precision, intent(in) :: fpt_dist, time
     double precision, intent(in) :: r(nt,3)
     double precision, intent(inout) :: has_collided(nt, nt)
+    integer, intent(inout) :: in_rxn_rad(nt,nt)
     if (col_type.eq.0) then
         return
     else if (col_type.eq.1) then
-        call check_collisions_brute(r, nt, has_collided, fpt_dist, time)
+        call check_collisions_brute(r, nt, has_collided, fpt_dist, time, in_rxn_rad)
     else if (col_type.eq.2) then
-        call check_collisions_kd(r, nt, has_collided, fpt_dist, time)
+        call check_collisions_kd(r, nt, has_collided, fpt_dist, time, in_rxn_rad)
     else if (col_type.eq.3) then
-        call check_collisions_bb(r, nt, has_collided, fpt_dist, time)
+        call check_collisions_bb(r, nt, has_collided, fpt_dist, time, in_rxn_rad)
     else if (col_type.eq.4) then
         print*, 'Unimplemented: col_type == 4: check_collisions_bin.'
         stop 1
@@ -36,32 +37,59 @@ subroutine check_collisions(r, nt, has_collided, fpt_dist, time, col_type)
 end
 
 subroutine check_collisions_brute(r, nt, has_collided, fpt_dist, &
-        time)
-    integer nt
-    double precision fpt_dist, time
-    double precision r(nt,3), has_collided(nt, nt)
+        time, in_rxn_rad)
+    implicit none 
+
+    integer, intent(in) :: nt
+    integer k1, k2
+    double precision, intent(in) :: fpt_dist, time, r(nt,3)
+    double precision, intent(inout) :: has_collided(nt, nt)
+    integer, intent(inout) :: in_rxn_rad(nt,nt)
+
+
+    !integer nt, in_rxn_rad(nt,nt),k1,k2
+    !double precision fpt_dist, time
+    !double precision r(nt,3), has_collided(nt, nt)
+
+    ! initialize in_rxn_rad
+    do k1 = 1, nt
+        do k2 = 1, nt
+            in_rxn_rad(k1,k2) = 0
+        end do
+    end do
+     
     !     check if the particles have collided
     do k1 = 1, nt
         do k2 = 1, nt
-            if (has_collided(k1,k2).lt.0.0d0 .and. k1.ne.k2 &
-                .and. abs(r(k1,1) - r(k2,1)) < fpt_dist &
-                .and. abs(r(k1,2) - r(k2,2)) < fpt_dist &
-                .and. abs(r(k1,3) - r(k2,3)) < fpt_dist) then
-                has_collided(k1,k2) = time
+            if ((k1.ne.k2) &
+                .and. (abs(r(k1,1) - r(k2,1)) < fpt_dist) &
+                .and. (abs(r(k1,2) - r(k2,2)) < fpt_dist) &
+                .and. (abs(r(k1,3) - r(k2,3)) < fpt_dist)) then
+                in_rxn_rad(k1,k2) = 1
+                if (has_collided(k1,k2).lt.0.0d0) then
+                   has_collided(k1,k2) = time
+                end if 
             end if
         end do
     end do
 end
 
-subroutine check_collisions_kd(r, nt, has_collided, fpt_dist, time)
+subroutine check_collisions_kd(r, nt, has_collided, fpt_dist, time, in_rxn_rad)
     use kdtree2_module, only : kdtree2, kdtree2_result, kdtree2_create, &
                                 kdtree2_r_nearest_around_point
-
-    integer nt, nfound, nalloc, k1, k2, i
+    implicit none
+    integer nt, nfound, nalloc, k1, k2, i, in_rxn_rad(nt,nt)
     double precision fpt_dist, time
     double precision r(nt,3), has_collided(nt, nt)
     type(kdtree2), pointer :: col_tree
     type(kdtree2_result), allocatable :: kd_results(:)
+
+    ! initialize in_rxn_rad
+    do k1 = 1, nt
+        do k2 = 1, nt
+            in_rxn_rad(k1,k2) = 0
+        end do
+    end do
 
     col_tree => kdtree2_create(r, rearrange = .true., sort = .false.)
     do k1 = 1,nt
@@ -70,6 +98,7 @@ subroutine check_collisions_kd(r, nt, has_collided, fpt_dist, time)
             results = kd_results)
         do i = 1,nfound
             k2 = kd_results(i)%idx
+            in_rxn_rad(k1,k2) = 1
             if (has_collided(k1,k2) .lt. 0) then
                 has_collided(k1,k2) = time
             endif
@@ -77,7 +106,7 @@ subroutine check_collisions_kd(r, nt, has_collided, fpt_dist, time)
     enddo
 end
 
-subroutine check_collisions_bb(r, nt, has_collided, fpt_dist, time)
+subroutine check_collisions_bb(r, nt, has_collided, fpt_dist, time, in_rxn_rad)
 ! at each time point, we want to have 2 "pointer arrays", ind & indi
 ! r(ind(:,k),k) is in order for k in 1,2,3    i.e. [~,ind(:,1)] = sort(r(:,1)
 ! ind(indi(i,k),k) == i for k in 1,2,3
@@ -91,6 +120,7 @@ subroutine check_collisions_bb(r, nt, has_collided, fpt_dist, time)
     integer, intent(in) :: nt
     double precision, intent(in) :: fpt_dist, time, r(nt,3)
     double precision, intent(inout) :: has_collided(nt, nt)
+    integer, intent(inout) :: in_rxn_rad(nt,nt)
 
     integer :: neighbors(nt,nt)  ! most of array won't be used, probably
         ! neighbors(1:num_neighbors(i),i) holds neighbors of bead i for each i
@@ -113,6 +143,14 @@ subroutine check_collisions_bb(r, nt, has_collided, fpt_dist, time)
     integer, save :: is_allocated = 0 ! "static" variable, allow initial setup
     integer :: curr_indi, curr_ind, i, j, d
     double precision :: rneighbor, rd0
+
+    ! initialize in_rxn_rad
+    do i = 1, nt
+        do j = 1, nt
+            in_rxn_rad(i,j) = 0
+        end do
+    end do
+
     ! initialize ind and indi on first pass, requires O(n log n) sort
     if (is_allocated == 0) then
         is_allocated = 1
@@ -222,6 +260,7 @@ subroutine check_collisions_bb(r, nt, has_collided, fpt_dist, time)
     ! neighbors(neighborj, beadi), num_neighbors(beadi)
     do i = 1, nt
         do j = 1, num_neighbors(i)
+            in_rxn_rad(i,neighbors(j,i)) = 1
             if (has_collided(neighbors(j,i),i) < 0.0_dp) then
                 has_collided(neighbors(j,i),i) = time
             endif

@@ -2,7 +2,9 @@
 
       SUBROUTINE BDsim(R,U,NT,N,NP,TIME,TTOT,DT,BROWN, &
            INTON,IDUM,PARA,SIMTYPE,HAS_COLLIDED,FPT_DIST, &
-           COL_TYPE)
+           COL_TYPE,METH_STATUS,IN_RXN_RAD,PAIRS,KM,KD,KTOT, &
+           NUC_SITE,NUM_SPREAD,NUM_METHYLATED,NUM_DECAY, &
+           COULD_REACT,RXN_HAPPEN,DT_MOD,DYN)
 
 !
 !     External subroutine to perform a Brownian dynamics simulation.
@@ -20,7 +22,6 @@
 
 !     Variables in the simulation
 
-      DOUBLE PRECISION B(NT-1)  ! Bond length
       DOUBLE PRECISION RS(NT,3) ! R during the step
       DOUBLE PRECISION US(NT,3) ! R during the step
       DOUBLE PRECISION L0       ! Bond distances
@@ -71,6 +72,23 @@
       DOUBLE PRECISION HAS_COLLIDED(NT,NT)
       DOUBLE PRECISION FPT_DIST ! l1 dist to trigger collision
       INTEGER COL_TYPE ! algorithm to use for collision detection
+
+!     Variables for methyl profile tracking
+      INTEGER METH_STATUS(NT) ! methylation status of each site: 1 = methylated, 0 = unmethylated
+      INTEGER IN_RXN_RAD(NT,NT) ! is pair of sites within reaction radius? 1 = yes, 0 = no
+      INTEGER PAIRS(2,NT) ! array that holds indices of sites that could react
+      DOUBLE PRECISION KM ! rate of methylation
+      DOUBLE PRECISION KD ! rate of demethylation
+      DOUBLE PRECISION KTOT ! total rate constant
+      INTEGER NUC_SITE ! bead index of nucleation site
+      INTEGER NUM_SPREAD ! total number of spreading events
+      INTEGER NUM_METHYLATED ! number of methylated sites
+      INTEGER NUM_DECAY ! total number of decay events
+      INTEGER COULD_REACT ! number of pairs in which methyl mark could spread
+      INTEGER RXN_HAPPEN ! reaction status: 1 = reaction, 0 = no reaction
+      DOUBLE PRECISION DT_MOD ! time remaining in timestep for Gillespie algorithm
+      INTEGER DYN ! include dynamics?
+
 
 !     Load the input parameters
 
@@ -128,6 +146,25 @@
       DO WHILE (TIME.LT.TTOT)
 
          call CHECK_COLLISIONS(R, NT, HAS_COLLIDED, FPT_DIST, TIME, COL_TYPE)
+
+         DT_MOD = DT
+
+         DO WHILE (RXN_HAPPEN.EQ.1)
+
+            COULD_REACT = 0
+
+            call CHECK_REACTIONS(R, NT, METH_STATUS, IN_RXN_RAD, COULD_REACT, FPT_DIST, PAIRS)
+
+            call TOT_RATE_CONSTANT(NT, COULD_REACT, METH_STATUS, KM, KD, KTOT, NUM_METHYLATED)
+
+            call METHYL_PROFILE(NT,METH_STATUS,KTOT,KM,KD,NUM_METHYLATED,TIME, &
+                 RXN_HAPPEN,PAIRS,DT,DT_MOD,NUC_SITE,NUM_SPREAD,NUM_DECAY)
+
+         END DO
+
+         RXN_HAPPEN = 1
+
+         if (DYN.EQ.1) then
 
 
 !     Calculate the random forces and torques for use in this
@@ -246,6 +283,7 @@
             RK=RK+1
 
          ENDDO
+         endif
 
          TIME=TIME+DT
 

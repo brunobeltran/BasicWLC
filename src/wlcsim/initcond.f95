@@ -53,7 +53,7 @@ GAM=PARA(4)
 
 !     Setup the choice parameters
 
-if (FRMFILE)then
+if (FRMFILE) then
    OPEN (UNIT = 5, FILE = 'input/r0', STATUS = 'OLD')
    Do I=1,NT
       READ(5,*) R(I,1),R(I,2),R(I,3)

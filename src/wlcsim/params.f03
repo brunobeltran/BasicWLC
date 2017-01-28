@@ -99,12 +99,15 @@ module params
         real(dp) rend   ! initial end-to-end distance (if applicable in initialization)
 
     !   for simulating chromatin methylation
-        real(dp) EU       ! Energy of HP1 binding for unmethalated sites
-        real(dp) EM       ! Energy of HP1 binding for methalated sites
-        real(dp) HP1_Bind ! Energy of binding of HP1 to eachother
+        real(dp) EU       ! Energy of HP1 binding for unmethylated sites
+        real(dp) EM       ! Energy of HP1 binding for methylated sites
+        real(dp) HP1_Bind ! Energy of binding of HP1 to each other
         real(dp) F_METH   ! Fraction methalated is using option 2 ( for initialization )
         real(dp) LAM_METH ! eigenvalue of transition matrix generating initial methalation
         real(dp) mu       ! chemical potential of HP1
+        real(dp) km       ! rate of methylation
+        real(dp) kd       ! rate of demethylation
+        integer nuc_site ! bead index of nucleation site
 
     !   box size things
         integer NBIN     ! Number of bins
@@ -153,6 +156,9 @@ module params
         logical exitWhenCollided  ! stop sim with coltimes is full
         logical saveR             ! save R vectors to file
         logical saveU             ! save U vectors to file
+        logical saveM             ! methylation state in gillespie sims
+        logical saveP             ! number of pairs that can react at time step
+        logical saveMethInfo      ! misc info about gillespie sims
         logical saveAB            ! save AB (chemical identity) to file
         logical savePhi           ! save Phi vectors to file
         integer solType           ! Melt vs. Solution, Choose hamiltonian
@@ -167,6 +173,7 @@ module params
                              ! uses many of the same functions as the chemical
                              ! identity/"meth"ylation code, but energies are calcualted via a field-based approach
         logical bind_On ! chemical identities of each bead are tracked in the "meth" variable
+        logical do_bd_with_gillespie
 
     !   parallel Tempering parameters
         character(MAXFILENAMELEN) repSuffix    ! prefix for writing files
@@ -283,6 +290,18 @@ module params
         integer, allocatable, dimension(:) :: nSWAPdown !number of times this replica has swapped with replica below
         integer, allocatable, dimension(:) :: nodeNUMBER !vector of replicas indices for nodes
 
+    !   Gillespie variables
+        INTEGER, ALLOCATABLE, DIMENSION(:):: METH_STATUS ! methylation status of each site: 1 = methylated, 0 = unmethylated
+        INTEGER, ALLOCATABLE, DIMENSION(:,:) :: IN_RXN_RAD ! is pair of sites within reaction radius? 1 = yes, 0 = no
+        INTEGER, ALLOCATABLE, DIMENSION(:,:) :: PAIRS ! array that holds indices of sites that could react
+        real(dp) ktot ! total rate constant
+        integer num_spread ! total number of spreading events
+        integer num_methylated ! number of methylated sites
+        integer num_decay ! total number of decay events
+        integer could_react ! number of pairs in which methyl mark could spread
+        integer rxn_happen ! reaction status: 1 = reaction, 0 = no reaction
+        real(dp) dt_mod ! time remaining in timestep for Gillespie algorithm
+
     !   random number generator state
         type(random_stat) rand_stat
         integer rand_seed
@@ -315,6 +334,9 @@ contains
         wlc_p%FRMFIELD=.FALSE.     ! don't load initial field values from file
         wlc_p%saveR=.TRUE.         ! do save orientation vectors (makes restart of ssWLC possible)
         wlc_p%saveU=.TRUE.         ! do save orientation vectors (makes restart of ssWLC possible)
+        wlc_p%saveM = .False.
+        wlc_p%saveP = .False.
+        wlc_p%saveMethInfo = .False.
         wlc_p%saveAB = .False.     ! dont' save AB by default, almost nobody uses this
         wlc_p%collisionDetectionType=0         ! don't track first passage time collisions between beads
         wlc_p%collisionRadius=0    ! never collide except on floating-point coincidence
@@ -434,6 +456,11 @@ contains
             wlc_d%PHIT(mctype)=0.0_dp
         enddo
 
+        ! Gillespie options
+        wlc_p%do_bd_with_gillespie = .TRUE.
+        wlc_p%km = NaN
+        wlc_p%kd = NaN
+        wlc_p%nuc_site = -1
     end subroutine
 
     subroutine read_input_file(infile, wlc_p)
@@ -688,6 +715,20 @@ contains
             call reado(wlc_p%pt_twist)  ! parallel temper over linking numbers
         case('RESTART')
             call reado(wlc_p%restart) ! Restart from parallel tempering
+        case('KM')
+            call readF(wlc_p%kM)
+        case('KD')
+            call readF(wlc_p%kD)
+        case('NUC_SITE')
+            call readI(wlc_p%nuc_site)
+        case('DO_BD_WITH_GILLESPIE')
+            call readO(wlc_p%do_bd_with_gillespie)
+        case('SAVEM')
+            call reado(wlc_p%saveM)
+        case('SAVEP')
+            call reado(wlc_p%saveP)
+        case('SAVEMETHINFO')
+            call reado(wlc_p%saveMethInfo)
         case default
             print *, "Warning, the input key ", trim(Word), " was not recognized."
             print *, "    ...Checking deprecated variable names"
@@ -1125,6 +1166,21 @@ contains
         wlc_d%time_ind = 0
         wlc_d%mc_ind = 0
 
+        if (wlc_p%codeName == 'sarah') then
+            allocate(wlc_d%meth_status(wlc_p%nt))
+            allocate(wlc_d%in_rxn_rad(wlc_p%nt, wlc_p%nt))
+            allocate(wlc_d%pairs(2, wlc_p%nt))
+
+            wlc_d%num_spread = 0
+            wlc_d%num_decay = 0
+            wlc_d%ktot = 1.0_dp
+
+            call initial_methyl_profile(wlc_p%nt, wlc_d%meth_status, wlc_p%nuc_site)
+            wlc_d%num_methylated = sum(wlc_d%meth_status)
+            wlc_d%rxn_happen = 1
+            PRINT *, 'initial number of methylated sites =', wlc_d%num_methylated
+        endif
+
     end subroutine initialize_wlcsim_data
 
     function pack_as_para(wlc_p) result(para)
@@ -1370,6 +1426,10 @@ contains
             wlc_p%moveON(3) = 0
         endif
 
+        if (wlc_p%nuc_site .eq. -1) then
+            wlc_p%nuc_site = ceiling(wlc_p%nt/2.0_dp)
+        endif
+
     end subroutine
 
     subroutine wlcsim_params_recenter(wlc_p,wlc_d)
@@ -1404,6 +1464,14 @@ contains
         print*, 'Current time ', wlc_d%time
         print*, 'Time point ', wlc_d%time_ind, ' out of ', wlc_p%stepsPerSave*wlc_p%numSavePoints
         print*, 'Save point ', i, ' out of ', wlc_p%numSavePoints
+    end subroutine
+
+    subroutine printMethylationInfo(wlc_d)
+        implicit none
+        type(wlcsim_data), intent(in) :: wlc_d
+        PRINT*, 'Number of spreading events ', wlc_d%NUM_SPREAD
+        PRINT*, 'Number of methylated sites ', wlc_d%NUM_METHYLATED
+        PRINT*, 'Number of decay events ', wlc_d%NUM_DECAY
     end subroutine
 
     subroutine printEnergies(wlc_d)
@@ -1934,6 +2002,35 @@ contains
             do ind=1,wlc_p%nt
                 write(outFileUnit,*) (wlc_d%coltimes(ind,j), j=1,wlc_p%nt)
             enddo
+            close(outFileUnit)
+        endif
+
+        if (wlc_p%saveM) then
+            write(filename,num2strFormatString) save_ind
+            filename = trim(adjustL(outfile_base)) // 'm' // trim(adjustL(filename))
+            do ind=1,wlc_p%nt
+                write(outFileUnit,*) wlc_d%meth_status(ind)
+            enddo
+        endif
+
+        if (wlc_p%saveP) then
+            write(filename,num2strFormatString) save_ind
+            filename = trim(adjustL(outfile_base)) // 'p' // trim(adjustL(filename))
+            write(outFileUnit,*) wlc_d%could_react
+        endif
+
+        if (wlc_p%saveMethInfo) then
+            filename = trim(adjustL(outfile_base)) // 'num_spread'
+            open(unit=outFileUnit, file=filename, status='REPLACE')
+            write(outFileUnit,*) wlc_d%num_spread
+            close(outFileUnit)
+            filename = trim(adjustL(outfile_base)) // 'num_decay'
+            open(unit=outFileUnit, file=filename, status='REPLACE')
+            write(outFileUnit,*) wlc_d%num_decay
+            close(outFileUnit)
+            filename = trim(adjustL(outfile_base)) // 'num_meth'
+            open(unit=outFileUnit, file=filename, status='REPLACE')
+            write(outFileUnit,*) wlc_d%num_methylated
             close(outFileUnit)
         endif
     end subroutine save_simulation_state
