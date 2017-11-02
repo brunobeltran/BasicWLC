@@ -7,6 +7,7 @@ import numpy as np
 
 self_dir, self_file = os.path.split(os.path.realpath(__file__))
 src_dir = os.path.join(self_dir, '..', 'src')
+params_file = os.path.join(src_dir, 'wlcsim', 'params.f03')
 
 mc_moves = pd.Series({
     1: 'crank_shaft',
@@ -94,11 +95,10 @@ def get_function_body(function_name, file):
         for line in f:
             if start_re.search(line):
                 appending = True
-                continue
-            if end_re.search(line):
-                break
             if appending:
                 function_lines.append(line)
+            if end_re.search(line):
+                break
     return function_lines
 
 def get_type_body(type_name, file):
@@ -110,11 +110,10 @@ def get_type_body(type_name, file):
         for line in f:
             if start_re.search(line):
                 appending = True
-                continue
-            if end_re.search(line):
-                break
             if appending:
                 type_lines.append(line)
+            if end_re.search(line):
+                break
     return type_lines
 
 # end extract parts of the code
@@ -146,8 +145,8 @@ def wlc_p_to_defines():
     on other input parameters.
     """
     vars_to_keep = ['EB', 'EPAR', 'EPERP', 'ESELF', 'GAM', 'ETA', 'XIR',
-            'SIGMA', 'XIU', 'DEL', 'LHC', 'VHC', 'REND', 'L0', 'EPS',
-            'DT', 'NBIN', 'NT', 'SIMTYPE',
+            'SIGMA', 'XIU', 'DEL', 'LHC', 'VHC', 'REND', 'DT', 'NBIN',
+            'NT', 'SIMTYPE',
                    # parallel tempered variables, quinn
             'CHI', 'MU', 'HA', 'HP1_BIND', 'KAP', 'CHI_L2',
             'RECENTER_ON', 'KAP_ON', 'CHI_ON', 'COUPLE_ON', 'FIELD_INT_ON',
@@ -157,12 +156,12 @@ def wlc_p_to_defines():
     wlc_p_usage_re = re.compile("[^!]*wlc_p%("+ var_re +")\(("+ var_re +")\)")
     wlc_p_usage_re_grep =      "^[^!]*wlc_p%" + var_re + "\(" + var_re + "\)"
     defaults = extract_from_lines(
-            get_function_body('set_param_defaults', 'src/wlcsim/params.f03'),
+            get_function_body('set_param_defaults', params_file),
             'wlc_p_default')
     for col in ['name', 'indexer', 'value']:
         defaults[col] = defaults[col].str.upper()
     variables = extract_from_lines(
-            get_type_body('wlcsim_params', 'src/wlcsim/params.f03'),
+            get_type_body('wlcsim_params', params_file),
             'declaration')
     for col in ['type', 'type_size', 'name', 'shape']:
         variables[col] = variables[col].str.upper()
@@ -319,17 +318,17 @@ def perform_wlc_p_to_define_transform():
     to_delete = defines['shape'].isnull() & (~defines.keep_regardless)
     declarations_to_delete = defines[to_delete]
     declarations_to_keep = defines[~to_delete]
-    delete_declaration_lines(declarations_to_delete.name.values, os.path.join(src_dir, 'wlcsim', 'params.f03'),
-                             in_type='wlcsim_params')
-    # delete_definition_lines(defines.name.values, os.path.join(src_dir, 'wlcsim', 'params.f03'),
-    #                         in_subroutine='set_param_defaults')
-    delete_subroutine('set_param_defaults', os.path.join(src_dir, 'wlcsim', 'params.f03'))
-    delete_subroutine('read_input_file', os.path.join(src_dir, 'wlcsim', 'params.f03'))
     defines_to_be_written = defines.loc[~defines.keep_regardless]
     make_defines_inc(defines_to_be_written)
     temp_rename(declarations_to_keep)
     replace_wlc_p_instances(declarations_to_delete)
     temp_rename(declarations_to_keep, undo=True)
+    delete_declaration_lines(declarations_to_delete.name.values, params_file,
+                             in_type='wlcsim_params')
+    # delete_definition_lines(defines.name.values, params_file,
+    #                         in_subroutine='set_param_defaults')
+    delete_subroutine('set_param_defaults', params_file)
+    delete_subroutine('read_input_file', params_file)
     add_looped_defaults(defines)
 
 def delete_subroutine(name, file):
@@ -347,7 +346,6 @@ def delete_subroutine(name, file):
                 f.write(line)
 
 def add_looped_defaults(defines):
-    params_file = os.path.join(src_dir, 'wlcsim', 'params.f03')
     with open(params_file, 'r') as f:
         old_file = f.readlines()
     with open(params_file, 'w') as f:
