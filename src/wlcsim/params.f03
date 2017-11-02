@@ -9,8 +9,6 @@
 !   as a whole should also go here.
 !
 !   --------------------------------------------------------------
-#include <src/wlcsim/defs.h>
-
 
 module params
     use, intrinsic :: iso_fortran_env
@@ -128,7 +126,7 @@ module params
         integer nColBin  ! Number of collision-detection bins on each edge
         real(dp) lbox(3)  ! monte carlo field bin total box length (approximate)
         real(dp) dbin      ! monte carlo field bin discretization size (approximate)
-        real(dp) confinementParameter(3)
+        real(dp) confinementParameter(2)
 
     !   Monte Carlo Variables (for adaptation)
         real(dp) PDesire(nMoveTypes) ! desired hit rate
@@ -352,6 +350,7 @@ contains
         wlc_p%restart = .FALSE.      ! don't restart from previously saved simulation
 
         ! geometry options
+        wlc_p%L = 0 ! set this yourself!
         wlc_p%NP  =1               ! one polymer
         wlc_p%nB  =200             ! 200 beads per polymer
         wlc_p%nBpM = 10
@@ -371,6 +370,7 @@ contains
         wlc_p%LAM_METH = 0.9_dp ! highly alternating sequence by default
         wlc_p%fPoly = 0.025_dp   ! volume fraction of plymer corresponding to HELA DNA in cytoplasm
         wlc_p%k_field = 0.0_dp ! some previous values: !1.5708_dp !0.3145_dp
+        wlc_p%nbinx = 10
 
         ! energy parameters
         wlc_p%EPS =0.3_dp ! TOdo: not input
@@ -385,7 +385,7 @@ contains
 
 
         ! options
-        !wlc_p__codeName= "brad" ! not bruno, brad, or quinn, so will error unless specified elsewehre
+        wlc_p%codeName= "" ! not bruno, brad, or quinn, so will error unless specified elsewehre
         wlc_p%initCondType = 'randomWalkWithBoundary' ! 0 for initializing polymer in non-random straight line
         wlc_p%confineType = 'none' ! 0 for no confinement
         wlc_p%ring = .false.    ! not a ring by default
@@ -510,7 +510,7 @@ contains
 
         select case(WORD) ! pick which keyword, case matchign string must be all uppercase
         case('CODENAME') ! select version of wlcsim to run
-            !call readA(wlc_p__codeName)
+            !call readA(wlc_p%codeName)
             print*, WORD, "is nolonger a input"
             stop
         case('INITCONDTYPE')
@@ -985,7 +985,7 @@ contains
         call stop_if_err(wlc_p%REND > wlc_p%L, &
             "Requesting initial end-to-end distance larger than polymer length.")
 
-        if (wlc_p__codeName == 'quinn') then
+        if (wlc_p%codeName == 'quinn') then
            if ((wlc_p%NBinX(1)-wlc_p%NBinX(2).ne.0).or. &
                 (wlc_p%NBinX(1)-wlc_p%NBinX(3).ne.0)) then
               err = wlc_p%confinetype.ne.'periodicUnequal'
@@ -1104,7 +1104,7 @@ contains
 #endif
         allocate(wlc_d%R(3,NT))
         allocate(wlc_d%U(3,NT))
-        if (wlc_p__codeName /= 'bruno' .OR. wlc_p%nInitMCSteps /= 0) then
+        if (wlc_p%codeName /= 'bruno' .OR. wlc_p%nInitMCSteps /= 0) then
             allocate(wlc_d%RP(3,NT))
             allocate(wlc_d%UP(3,NT))
             wlc_d%RP=nan  ! To prevent accidental use
@@ -1319,7 +1319,7 @@ contains
         implicit none
         type(wlcsim_params), intent(in) :: wlc_p
         print*, "---------------System Description---------------"
-        print*, " type of simulation, codeName", wlc_p__codeName
+        print*, " type of simulation, codeName", wlc_p%codeName
         print*, " WLC, DSSWLC, GC, simType", wlc_p%simType
         print*, "Bead variables:"
         print*, " Total number of beads, NT = ", wlc_p%NT
@@ -1484,7 +1484,7 @@ contains
             print*, "to ", wlc_p%dBin
         endif
 
-        if (wlc_p__codeName == 'brad') then
+        if (wlc_p%codeName == 'brad') then
             ! initialize windows to number of beads
             wlc_p%MAXWindoW = wlc_p%nB         ! Max Size of window for bead selection
             wlc_p% MinWindoW  = 1         ! Min Size of window for bead selection
