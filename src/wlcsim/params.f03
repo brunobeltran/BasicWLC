@@ -24,7 +24,7 @@ module params
     !!!     hardcoded params. will need to change if certain parts of code change
     ! number of wlc_p move types
     integer, parameter :: nMoveTypes = 11
-
+    integer, parameter :: nDim = 3
     !!!     arbitrary technical choices
     ! used for all character buffers holding filenames
     integer, parameter :: MAXFILENAMELEN = 500
@@ -72,7 +72,7 @@ module params
     !
     ! many of these variables are used only in certain kinds of simulations
     type wlcsim_params
-        !character(MAXPARAMLEN) codeName ! which simulation code to run
+        character(MAXPARAMLEN) codeName ! which simulation code to run
     !   Simulation parameters
         integer simType           ! whether to use WLC, ssWLC, or Gaussian Chain
         integer nT                ! Total number of beads  NT = nBpM*nMpP*np
@@ -122,9 +122,9 @@ module params
 
     !   boundary/box things
         integer NBin     ! Number of bins
-        integer NBinX(3) ! Number of MC bins on an edge
+        integer NBinX(nDim) ! Number of MC bins on an edge
         integer nColBin  ! Number of collision-detection bins on each edge
-        real(dp) lbox(3)  ! monte carlo field bin total box length (approximate)
+        real(dp) lbox(nDim)  ! monte carlo field bin total box length (approximate)
         real(dp) dbin      ! monte carlo field bin discretization size (approximate)
         real(dp) confinementParameter(2)
 
@@ -159,7 +159,6 @@ module params
         integer LK                ! Linking number
         character(MAXPARAMLEN) confinetype       ! type of Boundary Conditions
         character(MAXPARAMLEN) initCondType           ! initial condition type
-        logical field_interactions ! field-based self interactions on
         logical intrapolymer_stick_crossing_enforced ! field-based self interactions on
         logical FRwlc_pHEM           ! read initial chemical sequence from file
         logical FRMchem           ! read initial chemical/methylation state from file
@@ -177,9 +176,7 @@ module params
         real(dp) Couple_ON  ! fraction of Coupling energy contributing to "calculated" energy
         logical restart     ! whether we are restarting from a previous sim or not
         logical inTERP_BEAD_LENNARD_JONES ! whether to have inter bead lennard jones energies
-        logical field_int_on ! include field interactions (e.g. A/B interactions)
-                             ! uses many of the same functions as the chemical
-                             ! identity/"meth"ylation code, but energies are calcualted via a field-based approach
+        logical field_int_on ! include field interactions (e.g. A/B interactions) uses many of the same functions as the chemical identity/"meth"ylation code, but energies are calcualted via a field-based approach
         logical bind_On ! chemical identities of each bead are tracked in the "meth" variable
         logical changingChemicalIdentity
         logical asymmetricAlternatingChem
@@ -323,7 +320,7 @@ module params
 
 contains
 
-    subroutine set_param_defaults(wlc_p,wlc_d)
+    subroutine set_param_defaults(wlc_p)
         implicit none
         ! WARNinG: changing this to intent(out) means that unassigned values
         ! here will become undefined upon return, due to Fortran's weird
@@ -334,7 +331,6 @@ contains
         ! this is almost definitely undesireable, since "undefined" means the
         ! behavior will depend on which compiler is used
         type(wlcsim_params), intent(inout) :: wlc_p
-        type(wlcsim_data), intent(inout) :: wlc_d
         integer mctype
         ! file IO
         wlc_p%FRMfile = .FALSE.      ! don't load initial bead positions from file
@@ -356,13 +352,15 @@ contains
         wlc_p%nBpM = 10
         wlc_p%lp = 1                ! units of lp by default
         wlc_p%lt = 1                ! twist persistence length equals persistence length by default
-        wlc_p%nMpP = wlc_p%nB / wlc_p%nBpM
-        wlc_p%nT = wlc_p%nP * wlc_p%nB
+        wlc_p%nMpP = wlc_p%nB/wlc_p%nBpM
+        wlc_p%nT = wlc_p%nP*wlc_p%nB
         wlc_p%confinementParameter = nan
         wlc_p%lbox = nan     ! box size/confinment, *MUST* be set by user
         wlc_p%nColBin = 1   ! equivalent to collisionDetectionType = 1
         wlc_p%dbin = NaN ! set in tweak_param_defaults
         ! wlc_p%l0  =1.25_dp         ! TOdo: not input
+        wlc_p%L0 = wlc_p%l/real(wlc_p%nb-1.0_dp) ! -1.0 because one fewer segments then beads
+        wlc_p%eps = wlc_p%L0/(2.0_dp*wlc_p%lp)
         wlc_p%beadVolume  = 0.1_dp ! much smaller than space between beads
         wlc_p%fA  =0.5_dp  ! half A, half B by default
         wlc_p%LAM =0.0_dp  ! perfectly random sequence  (see generating_sequences.rst for details)
@@ -370,7 +368,12 @@ contains
         wlc_p%LAM_METH = 0.9_dp ! highly alternating sequence by default
         wlc_p%fPoly = 0.025_dp   ! volume fraction of plymer corresponding to HELA DNA in cytoplasm
         wlc_p%k_field = 0.0_dp ! some previous values: !1.5708_dp !0.3145_dp
-        wlc_p%nbinx = 10
+        wlc_p%nbinx = 0 ! set this yourself!
+        wlc_p%nbin = 0 ! set this yourself!
+        wlc_p%dbin = 1 ! should always be 1 according to quinn
+        wlc_p%LBOX = wlc_p%NBINX*wlc_p%dbin
+        wlc_p%NBin = wlc_p%NBinX(1)*wlc_p%NBinX(2)*wlc_p%NBinX(3)
+
 
         ! energy parameters
         wlc_p%EPS =0.3_dp ! TOdo: not input
@@ -400,6 +403,9 @@ contains
         wlc_p%changingChemicalIdentity = .FALSE.
         wlc_p%CHI_L2_ON = .FALSE.
         wlc_p%asymmetricAlternatingChem = .FALSE.
+
+        wlc_p%simtype = 2
+        wlc_p%intrapolymer_stick_crossing_enforced = .FALSE.
 
         ! timing options
         wlc_p%dt  = 1              ! set time scale to unit
@@ -464,19 +470,49 @@ contains
         wlc_p%movesPerStep(10) = 10  ! reptation
         wlc_p%movesPerStep(11) = 57  ! super-reptation
 
+        !    Maximum window size (large windows are expensive)
+        wlc_p%MAXWindoW(1) = dble(min(150,wlc_p%NB))
+        wlc_p%MAXWindoW(2) = dble(min(150,wlc_p%NB))
+        wlc_p%MAXWindoW(3) = dble(min(150,int(wlc_p%NB/2.0)))
+        wlc_p%MAXWindoW(4) = nan
+        wlc_p%MAXWindoW(5) = nan
+        wlc_p%MAXWindoW(6) = nan
+        wlc_p%MAXWindoW(7) = dble(min(4,wlc_p%NB))
+        wlc_p%MAXWindoW(8) = nan
+        wlc_p%MAXWindoW(9) = nan
+        wlc_p%MAXWindoW(10) = nan
+        wlc_p%MAXWindoW(11) = nan
+
+        wlc_p%MinAMP(1) = 0.1_dp*PI
+        wlc_p%MinAMP(2) = 0.2_dp*wlc_p%L0
+        wlc_p%MinAMP(3) = 0.2_dp*PI
+        wlc_p%MinAMP(4) = 0.2_dp*PI
+        wlc_p%MinAMP(5) = 0.05_dp*PI
+        wlc_p%MinAMP(6) = 0.2_dp*wlc_p%L0
+        wlc_p%MinAMP(7) = nan
+        wlc_p%MinAMP(8) = nan
+        wlc_p%MinAMP(9) = nan
+        wlc_p%MinAMP(10) = nan
+        wlc_p%MinAMP(11) = nan
+
+        wlc_p%MAXAMP(1) = 1.0_dp*PI
+        wlc_p%MAXAMP(2) = 1.0_dp*wlc_p%L0
+        wlc_p%MAXAMP(3) = 1.0_dp*PI
+        wlc_p%MAXAMP(4) = 1.0_dp*PI
+        wlc_p%MAXAMP(5) = 1.0_dp*PI
+        wlc_p%MAXAMP(6) = 0.1*wlc_p%lbox(1)
+        wlc_p%MAXAMP(7) = nan
+        wlc_p%MAXAMP(8) = nan
+        wlc_p%MAXAMP(9) = nan
+        wlc_p%MAXAMP(10) = nan
+        wlc_p%MAXAMP(11) = nan
+
         ! Balance move amplitude and number of beads
         do mctype = 1,nMovetypes
             wlc_p%winTarget(mctype) = 8.0_dp
             wlc_p%MinWindoW(mctype) = nan
-            wlc_d%MCAMP(mctype) = nan
-        enddo
-        do mctype = 1,nMovetypes
             wlc_p%NADAPT(mctype) = 1000 ! adapt after at most 1000 steps
             wlc_p%PDESIRE(mctype) = 0.5_dp ! Target
-            wlc_d%SUCCESS(mctype) = 0
-            wlc_d%ATTEMPTS(mctype) = 0
-            wlc_d%SUCCESStotal(mctype) = 0
-            wlc_d%PHIT(mctype) = 0.0_dp
         enddo
 
     end subroutine
@@ -614,8 +650,6 @@ contains
             call readF(wlc_p%confinementParameter(1))
         case('CONFINEMENTPARAMETER2')
             call readF(wlc_p%confinementParameter(2))
-        case('CONFINEMENTPARAMETER3')
-            call readF(wlc_p%confinementParameter(3))
         case('NCOLBIN')
             call readI(wlc_p%nColBin) ! number of bins in each dimension
         case('NP')
@@ -1053,12 +1087,12 @@ contains
         character(MAXFILENAMELEN), intent(in) :: infile  ! file with parameters
 
         ! baseline defaults
-        call set_param_defaults(wlc_p, wlc_d)
+        call set_param_defaults(wlc_p)
 
         call read_input_file(infile, wlc_p)
 
         ! advanced defaults that require some inputs to specify
-        call tweak_param_defaults(wlc_p, wlc_d)
+        call tweak_param_defaults(wlc_p)
 
         ! get derived parameters that aren't directly input from file
         call get_renormalized_chain_params(wlc_p)
@@ -1096,6 +1130,7 @@ contains
         integer ( kind = 4 ) source  !source id for messages
         integer ( kind = 4 ) status(MPI_status_SIZE) ! MPI stuff
         integer ( kind = 4 ) error  ! error id for MIP functions
+        integer mctype
         nt = wlc_p%nt
         nbin = wlc_p%nbin
 
@@ -1294,7 +1329,40 @@ contains
         wlc_d%time_ind = 0
         wlc_d%mc_ind = 0
 
+        !     Initial segment window for MC moves
+        wlc_d%Window(1) = wlc_p%nB/5.0_dp
+        wlc_d%Window(2) = wlc_p%nB/5.0_dp
+        wlc_d%Window(3) = wlc_p%nB/5.0_dp
+        wlc_d%Window(4) = 0
+        wlc_d%Window(5) = 0
+        wlc_d%Window(6) = 0
+        wlc_d%Window(7) = wlc_p%nB/5.0_dp
+        wlc_d%Window(8) = 0
+        wlc_d%Window(9) = 0
+        wlc_d%Window(10) = 1
+        wlc_d%Window(11) = wlc_p%nB/5.0_dp
 
+        do mctype = 1,nMovetypes
+            wlc_d%MCAMP(mctype) = nan
+            wlc_d%SUCCESS(mctype) = 0
+            wlc_d%ATTEMPTS(mctype) = 0
+            wlc_d%SUCCESStotal(mctype) = 0
+            wlc_d%PHIT(mctype) = 0.0_dp
+        enddo
+
+        !  Edit the following to optimize wlc_p performance
+        !  Monte-Carlo simulation parameters
+        wlc_d%MCAMP(1) = 0.5_dp*PI
+        wlc_d%MCAMP(2) = 0.3_dp*wlc_p%L0
+        wlc_d%MCAMP(3) = 0.5_dp*PI
+        wlc_d%MCAMP(4) = 0.5_dp*PI
+        wlc_d%MCAMP(5) = 0.5_dp*PI
+        wlc_d%MCAMP(6) = 5.0_dp*wlc_p%L0
+        wlc_d%MCAMP(7) = nan
+        wlc_d%MCAMP(8) = nan
+        wlc_d%MCAMP(9) = nan
+        wlc_d%MCAMP(10) = nan
+        wlc_d%MCAMP(11) = nan
 
     end subroutine initialize_wlcsim_data
 
@@ -1371,16 +1439,9 @@ contains
 
     end subroutine
 
-    subroutine tweak_param_defaults(wlc_p, wlc_d)
+    subroutine tweak_param_defaults(wlc_p)
         implicit none
         type(wlcsim_params), intent(inout) :: wlc_p
-        type(wlcsim_data), intent(inout) :: wlc_d
-        real(dp) :: default_window
-
-        if (wlc_p%dbin /= wlc_p%dbin) then
-            ! discretizing at 1 persistence length seems to be a reasonable default
-            wlc_p%dbin = wlc_p%lp
-        endif
 
         if (wlc_p%confineType == 'sphere') then
             wlc_p%fPoly = 6.0_dp*wlc_p%beadVolume*wlc_p%NT &
@@ -1389,21 +1450,6 @@ contains
             wlc_p%fPoly = wlc_p%beadVolume*wlc_p%NT &
                 /wlc_p%LBOX(1)/wlc_p%LBOX(2)/wlc_p%LBOX(3)
         endif
-
-        wlc_p%L0 = wlc_p%l/real(wlc_p%nb-1.0_dp) ! -1.0 because one fewer segments then beads
-        wlc_p%eps=wlc_p%L0/(2.0_dp*wlc_p%lp)
-        !  Edit the following to optimize wlc_p performance
-        !  Monte-Carlo simulation parameters
-        wlc_d%MCAMP(1) = 0.5_dp*PI
-        wlc_d%MCAMP(2) = 0.3_dp*wlc_p%L0
-        wlc_d%MCAMP(3) = 0.5_dp*PI
-        wlc_d%MCAMP(4) = 0.5_dp*PI
-        wlc_d%MCAMP(5) = 0.5_dp*PI
-        wlc_d%MCAMP(6) = 5.0_dp*wlc_p%L0
-        wlc_d%MCAMP(7) = nan
-        wlc_d%MCAMP(8) = nan
-        wlc_d%MCAMP(9) = nan
-        wlc_d%MCAMP(10) = nan
 
         ! if we're not using field interactions
         ! energies, then this should never be on
@@ -1418,71 +1464,10 @@ contains
             print*, "Turning off movetype 9, chain exchange, because <2 polymers"
         endif
 
-        !     Initial segment window for wlc_p moves
-        default_window = wlc_p%nB
-        default_window = max(default_window, 1.0_dp*wlc_p%nMpP*wlc_p%nBpM)
-        default_window = default_window/5.0_dp
-        wlc_d%Window(1) = default_window ! 15.0_dp ! used to be N*G
-        wlc_d%Window(2) = default_window ! 15.0_dp ! used to be N*G
-        wlc_d%Window(3) = default_window ! 15.0_dp ! used to be N*G
-        wlc_d%Window(4) = default_window ! 1.0_dp
-        wlc_d%Window(5) = default_window ! dble(wlc_p%nMpP*wlc_p%nBpM)
-        wlc_d%Window(6) = default_window ! dble(wlc_p%nMpP*wlc_p%nBpM)
-        wlc_d%Window(7) = default_window ! 15.0_dp ! used to be N*G
-        wlc_d%Window(8) = default_window ! dble(wlc_p%nMpP*wlc_p%nBpM)
-        wlc_d%Window(9) = default_window ! dble(wlc_p%nMpP*wlc_p%nBpM)
-        wlc_d%Window(9) = 1.0_dp
-
-        !    Maximum window size (large windows are expensive)
-        wlc_p%MAXWindoW(1) = dble(min(150,wlc_p%NB))
-        wlc_p%MAXWindoW(2) = dble(min(150,wlc_p%NB))
-        wlc_p%MAXWindoW(3) = dble(min(150,int(wlc_p%NB/2.0)))
-        wlc_p%MAXWindoW(4) = nan
-        wlc_p%MAXWindoW(5) = nan
-        wlc_p%MAXWindoW(6) = nan
-        wlc_p%MAXWindoW(7) = dble(min(4,wlc_p%NB))
-        wlc_p%MAXWindoW(8) = nan
-        wlc_p%MAXWindoW(9) = nan
-        wlc_p%MAXWindoW(9) = nan ! need to chaige code to allow >1
-
-
         if (wlc_p%MinWindow(1).ne.wlc_p%MinWindow(1)) wlc_p%MinWindoW(1) = dble(min(10,wlc_p%NB))
         if (wlc_p%MinWindow(2).ne.wlc_p%MinWindow(2)) wlc_p%MinWindoW(2) = dble(min(10,wlc_p%NB))
         if (wlc_p%MinWindow(3).ne.wlc_p%MinWindow(3)) wlc_p%MinWindoW(3) = dble(min(10,wlc_p%NB))
         if (wlc_p%MinWindow(7).ne.wlc_p%MinWindow(7)) wlc_p%MinWindoW(7) = dble(min(10,wlc_p%NB))
-
-        wlc_p%MinAMP(1) = 0.1_dp*PI
-        wlc_p%MinAMP(2) = 0.2_dp*wlc_p%L0
-        wlc_p%MinAMP(3) = 0.2_dp*PI
-        wlc_p%MinAMP(4) = 0.2_dp*PI
-        wlc_p%MinAMP(5) = 0.05_dp*PI
-        wlc_p%MinAMP(6) = 0.2_dp*wlc_p%L0
-        wlc_p%MinAMP(7) = nan
-        wlc_p%MinAMP(8) = nan
-        wlc_p%MinAMP(9) = nan
-        wlc_p%MinAMP(10) = nan
-
-        wlc_p%MAXAMP(1) = 1.0_dp*PI
-        wlc_p%MAXAMP(2) = 1.0_dp*wlc_p%L0
-        wlc_p%MAXAMP(3) = 1.0_dp*PI
-        wlc_p%MAXAMP(4) = 1.0_dp*PI
-        wlc_p%MAXAMP(5) = 1.0_dp*PI
-        wlc_p%MAXAMP(6) = 0.1*wlc_p%lbox(1)
-        wlc_p%MAXAMP(7) = nan
-        wlc_p%MAXAMP(8) = nan
-        wlc_p%MAXAMP(9) = nan
-        wlc_p%MAXAMP(10) = nan
-
-        ! Solution
-        wlc_p%NBinX(1) = nint(wlc_p%LBOX(1)/wlc_p%dBin)
-        wlc_p%NBinX(2) = nint(wlc_p%LBOX(2)/wlc_p%dBin)
-        wlc_p%NBinX(3) = nint(wlc_p%LBOX(3)/wlc_p%dBin)
-        wlc_p%NBin = wlc_p%NBinX(1)*wlc_p%NBinX(2)*wlc_p%NBinX(3)
-        if (abs(wlc_p%dBin*sum(wlc_p%NBinX) /sum(wlc_p%LBOX) -1)>0.001) then
-            print*, "Warning: I have changed the descritation lenth from:", wlc_p%dBin
-            wlc_p%dBin = wlc_p%lBox(1)*dble(wlc_p%NBinX(1))
-            print*, "to ", wlc_p%dBin
-        endif
 
         if (wlc_p%codeName == 'brad') then
             ! initialize windows to number of beads
