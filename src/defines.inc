@@ -30,10 +30,6 @@
 ! DEFAULTS COMMENT: ! twist persistence length equals persistence length by default
 ! TYPE: REAL(DP)
 #define WLC_P__LT 1
-! VARIABLE COMMENT: ! Path length between beads. (meaning unknown for gaussian chain?)
-! DEFAULTS COMMENT: ! TOdo: not input
-! TYPE: REAL(DP)
-#define WLC_P__L0 1.25_DP
 ! VARIABLE COMMENT: ! Bead volume
 ! DEFAULTS COMMENT: ! much smaller than space between beads
 ! TYPE: REAL(DP)
@@ -46,10 +42,6 @@
 ! DEFAULTS COMMENT: ! perfectly random sequence  (see generating_sequences.rst for details)
 ! TYPE: REAL(DP)
 #define WLC_P__LAM 0.0_DP
-! VARIABLE COMMENT: ! number of kuhn lengths between beads
-! DEFAULTS COMMENT: None
-! TYPE: REAL(DP)
-#define WLC_P__EPS WLC_P__L0/(2.0_DP*WLC_P__LP)
 ! VARIABLE COMMENT: ! radius triggering collisions to be recorded in "coltimes"
 ! DEFAULTS COMMENT: ! never collide except on floating-point coincidence
 ! TYPE: REAL(DP)
@@ -103,7 +95,7 @@
 ! TYPE: REAL(DP)
 #define WLC_P__LBOX_Z NAN
 ! VARIABLE COMMENT: ! monte carlo field bin discretization size (approximate)
-! DEFAULTS COMMENT: ! set in tweak_param_defaults
+! DEFAULTS COMMENT: ! should always be 1 according to quinn
 ! TYPE: REAL(DP)
 #define WLC_P__DBIN 1
 ! VARIABLE COMMENT: None
@@ -253,7 +245,7 @@
 ! VARIABLE COMMENT: ! minium amplitude
 ! DEFAULTS COMMENT: None
 ! TYPE: REAL(DP)
-#define WLC_P__MINAMP_SLIDE_MOVE 0.2_DP*WLC_P__L0
+#define WLC_P__MINAMP_SLIDE_MOVE 0.2_DP*wlc_p%L0
 ! VARIABLE COMMENT: ! minium amplitude
 ! DEFAULTS COMMENT: None
 ! TYPE: REAL(DP)
@@ -269,7 +261,7 @@
 ! VARIABLE COMMENT: ! minium amplitude
 ! DEFAULTS COMMENT: None
 ! TYPE: REAL(DP)
-#define WLC_P__MINAMP_FULL_CHAIN_SLIDE 0.2_DP*WLC_P__L0
+#define WLC_P__MINAMP_FULL_CHAIN_SLIDE 0.2_DP*wlc_p%L0
 ! VARIABLE COMMENT: ! minium amplitude
 ! DEFAULTS COMMENT: None
 ! TYPE: REAL(DP)
@@ -297,7 +289,7 @@
 ! VARIABLE COMMENT: ! maximum amplitude
 ! DEFAULTS COMMENT: None
 ! TYPE: REAL(DP)
-#define WLC_P__MAXAMP_SLIDE_MOVE 1.0_DP*WLC_P__L0
+#define WLC_P__MAXAMP_SLIDE_MOVE 1.0_DP*wlc_p%L0
 ! VARIABLE COMMENT: ! maximum amplitude
 ! DEFAULTS COMMENT: None
 ! TYPE: REAL(DP)

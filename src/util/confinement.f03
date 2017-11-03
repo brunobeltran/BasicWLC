@@ -1,4 +1,3 @@
-#include "../defines.inc"
 pure function in_confinement(RP, NT, IT1, IT2, wlc_p)
     use params, only : dp, wlcsim_params
     use inputparams, only : MAXPARAMLEN
@@ -13,46 +12,46 @@ pure function in_confinement(RP, NT, IT1, IT2, wlc_p)
     real(dp) rad, length, r2
 
     in_confinement = .True.
-    ! if (WLC_P__CONFINETYPE == 'none') then
+    ! if (wlc_p%confineType == 'none') then
     !     in_confinement = .False.
-    if (WLC_P__CONFINETYPE == 'platesInZperiodicXY') then
+    if (wlc_p%confineType == 'platesInZperiodicXY') then
         ! Confinement only in the z-direction
         ! limits: 0 and LBox(3)
         do I = IT1,IT2
-            if ((RP(3,I) < 0.0_dp) .or. (RP(3,I) > wlc_p%CONFINEMENTPARAMETER(1))) then
+            if ((RP(3,I) < 0.0_dp) .or. (RP(3,I) > wlc_p%confinementParameter(1))) then
                 in_confinement = .False.
                 return
             endif
         enddo
-    elseif (WLC_P__CONFINETYPE == 'cube') then
+    elseif (wlc_p%confineType == 'cube') then
         do I = IT1,IT2
             if ((RP(1,I) < 0.0_dp) &
-                .or. (RP(1,I) > wlc_p%CONFINEMENTPARAMETER(1)) &
+                .or. (RP(1,I) > wlc_p%confinementParameter(1)) &
                 .or. (RP(2,I) < 0.0_dp) &
-                .or. (RP(2,I) > wlc_p%CONFINEMENTPARAMETER(1)) &
+                .or. (RP(2,I) > wlc_p%confinementParameter(1)) &
                 .or. (RP(3,I) < 0.0_dp) &
-                .or. (RP(3,I) > wlc_p%CONFINEMENTPARAMETER(1))) then
+                .or. (RP(3,I) > wlc_p%confinementParameter(1))) then
                 in_confinement = .False.
                 return
             endif
         enddo
-    elseif (WLC_P__CONFINETYPE == 'sphere') then
+    elseif (wlc_p%confineType == 'sphere') then
         ! sphere with given diameter, centered at (r,r,r)
         do I = IT1,IT2
-            rad = wlc_p%CONFINEMENTPARAMETER(1)/2
+            rad = wlc_p%confinementParameter(1)/2
             if ((RP(1,I) - rad)**2 + (RP(2,I) - rad)**2 + &
                 (RP(3,I) - rad)**2 > rad) then
                 in_confinement = .False.
                 return
             endif
         enddo
-    elseif (WLC_P__CONFINETYPE == 'ecoli') then
+    elseif (wlc_p%confineType == 'ecoli') then
         ! cylinder with hemispherical caps, one tip at origin
         ! full length - lbox(1)/confinementParameter(1)
         ! diameter - lbox(2:3)/confinementParameter(2)
         do I = IT1,IT2
-            length = wlc_p%CONFINEMENTPARAMETER(1)
-            rad = wlc_p%CONFINEMENTPARAMETER(2)/2
+            length = wlc_p%confinementParameter(1)
+            rad = wlc_p%confinementParameter(2)/2
             r2 = RP(2,I)**2 + RP(3,I)**2
             if (r2 > rad &
                 .or. RP(1,I) > length &
@@ -76,7 +75,7 @@ pure function in_confinement(RP, NT, IT1, IT2, wlc_p)
             endif
         enddo
     ! always inside confinement otherwise
-    ! elseif(WLC_P__CONFINETYPE == 'periodicUnequal') then
+    ! elseif(wlc_p%confineType == 'periodicUnequal') then
     ! else
     ! print*, "Undefined comfone Type"
     ! stop 1

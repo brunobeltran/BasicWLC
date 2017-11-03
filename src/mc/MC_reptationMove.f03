@@ -1,4 +1,3 @@
-#include "../defines.inc"
 !--------------------------------------------------------------*
 !
 !           Makes Monti Carlo Moves
@@ -41,18 +40,18 @@ real(dp) u_relative(3) ! u in new coordinate system
 logical, intent(out) :: forward
 
 !TOdo saving RP is not actually needed, even in these cases, but Brad's code assumes that we have RP.
-if (WLC_P__RING .OR. WLC_P__INTERP_BEAD_LENNARD_JONES) then
+if (wlc_p%ring .OR. wlc_p%interp_bead_lennard_jones) then
     RP = R
     UP = U
 endif
 
 ! single bead reptation
-call random_index(WLC_P__NP,irnd,rand_stat)
+call random_index(wlc_p%NP,irnd,rand_stat)
 IP=irnd(1)
-IT1 = WLC_P__NB*(IP-1) + 1
-IT2 = WLC_P__NB*(IP-1) + WLC_P__NB
+IT1 = wlc_p%NB*(IP-1) + 1
+IT2 = wlc_p%NB*(IP-1) + wlc_p%NB
 IB1 = 1
-IB2 = WLC_P__NB
+IB2 = wlc_p%NB
 ! move forward or backward
 call random_number(urnd,rand_stat)
 if (urnd(1).lt.0.5_dp) then
